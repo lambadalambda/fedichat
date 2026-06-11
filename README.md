@@ -1,4 +1,6 @@
-# Comic Chat fediverse thread viewer
+# fedichat — Comic Chat fediverse thread viewer
+
+**Live: <https://lambadalambda.github.io/fedichat/>**
 
 Renders Pleroma/Mastodon threads as Microsoft Comic Chat strips, using the
 original character and background art (Jim Woodring, 1996-98) extracted from
@@ -35,6 +37,10 @@ Type `test` instead of a URL for the dev fixture.
 AVB v2.5 chunk layout and the decoded emotion codes (1 happy, 2 coy,
 3 bored, 4 scared, 5 sad, 6 angry, 7 shouting, 8 laughing, 9 neutral;
 gestures: 10 wave, 11 point at other, 12 point at self, 14 open arms) are
-documented in `scripts/extract_poses.py`. The character art is Microsoft
-copyright — don't ship `assets/` publicly; run the extraction scripts
-instead.
+documented in `scripts/extract_poses.py`.
+
+The character and background art is © Microsoft 1996-1998, drawn by Jim
+Woodring, extracted from the freely-distributed MS Chat 2.5 installer
+(archive.org). It's included here in the spirit of abandonware
+preservation, as Comic Chat fan sites have done since the late 90s; if
+you're Microsoft and mind, open an issue and it goes away.
