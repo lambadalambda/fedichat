@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comic Chat Thread Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --panel-w: 300px;
+    --panel-h: 260px;
+  }
+  body {
+    font-family: "Comic Sans MS", "Comic Neue", cursive;
+    background: #c0c0c0;
+    margin: 0;
+  }
+  header {
+    background: #000080;
+    color: white;
+    padding: 6px 12px;
+    font-size: 14px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  header input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 3px 6px;
+    border: 2px inset #fff;
+  }
+  header button {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 3px 10px;
+  }
+  #status { padding: 8px 12px; font-size: 13px; }
+  #strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--panel-w), 1fr));
+    gap: 0;
+    background: white;
+    margin: 12px;
+    border: 1px solid black;
+  }
+  .panel {
+    position: relative;
+    height: var(--panel-h);
+    border: 1px solid black;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center bottom;
+  }
+  .char {
+    position: absolute;
+    bottom: 0;
+    height: 58%;
+    image-rendering: auto;
+  }
+  .char img { height: 100%; }
+  .char.left  { left: 4%; }
+  .char.right { right: 4%; }
+  .char.flip img { transform: scaleX(-1); }
+  .balloon {
+    position: absolute;
+    top: 6px;
+    max-width: 62%;
+    background: white;
+    border: 1px solid black;
+    border-radius: 10px;
+    padding: 6px 9px;
+    font-size: 12px;
+    line-height: 1.25;
+    overflow-wrap: break-word;
+  }
+  .balloon.left  { left: 4%; }
+  .balloon.right { right: 4%; }
+  .balloon .tail {
+    position: absolute;
+    bottom: -14px;
+    width: 14px;
+    height: 15px;
+    overflow: hidden;
+  }
+  .balloon.left  .tail { left: 18%; }
+  .balloon.right .tail { right: 18%; }
+  .balloon .tail::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 9px solid transparent;
+    border-top: 15px solid black;
+  }
+  .balloon .tail::after {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: 1px;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 13px solid white;
+  }
+  .nametag {
+    position: absolute;
+    bottom: 2px;
+    font-size: 10px;
+    background: rgba(255,255,255,.85);
+    border: 1px solid black;
+    padding: 0 4px;
+    max-width: 44%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .nametag.left  { left: 2px; }
+  .nametag.right { right: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <b>Comic Chat</b>
+  <input id="url" placeholder="https://lain.com/notice/...">
+  <button id="go">View</button>
+</header>
+<div id="status"></div>
+<div id="strip"></div>
+
+<script>
+const ASSETS = 'assets/chars/';
+const NEUTRAL = 9; // emotion code for the wheel's center
+let manifest;
+
+// ---------- data ----------
+
+function parseNoticeUrl(u) {
+  const m = u.trim().match(/^https?:\/\/([^/]+)\/(?:notice|objects)\/([A-Za-z0-9]+)/);
+  if (!m) throw new Error('Expected a URL like https://instance/notice/<id>');
+  return { host: m[1], id: m[2] };
+}
+
+async function api(host, path) {
+  const r = await fetch(`https://${host}/api/v1/${path}`);
+  if (!r.ok) throw new Error(`API ${path}: HTTP ${r.status}`);
+  return r.json();
+}
+
+// Fetch the whole thread: walk up to the root, then take the root's descendants.
+async function fetchThread(host, id) {
+  const ctx = await api(host, `statuses/${id}/context`);
+  const rootId = ctx.ancestors.length ? ctx.ancestors[0].id : id;
+  if (rootId === id) {
+    const root = await api(host, `statuses/${id}`);
+    return [root, ...ctx.descendants];
+  }
+  const root = ctx.ancestors[0];
+  const rootCtx = await api(host, `statuses/${rootId}/context`);
+  return [root, ...rootCtx.descendants];
+}
+
+// ---------- comic mapping ----------
+
+function hash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+// Deterministically assign one of the 22 characters per account, avoiding
+// collisions until the cast is exhausted.
+function makeCast(statuses) {
+  const cast = new Map();
+  const taken = new Set();
+  for (const st of statuses) {
+    const acct = st.account.acct;
+    if (cast.has(acct)) continue;
+    let i = hash(acct) % manifest.characters.length;
+    for (let n = 0; n < manifest.characters.length && taken.has(i); n++)
+      i = (i + 1) % manifest.characters.length;
+    taken.add(i);
+    cast.set(acct, manifest.characters[i]);
+  }
+  return cast;
+}
+
+function plainText(st) {
+  const doc = new DOMParser().parseFromString(st.content, 'text/html');
+  // Drop leading @mentions, Comic Chat speech shouldn't start with handles.
+  for (const a of doc.querySelectorAll('a.mention, span.h-card')) {
+    const prev = a.previousSibling;
+    if (!prev || !prev.textContent.trim()) a.remove(); else break;
+  }
+  let text = doc.body.textContent.replace(/\s+/g, ' ').trim();
+  if (!text && st.media_attachments.length) text = '…';
+  if (st.media_attachments.length) text += ' [picture]';
+  if (text.length > 290) text = text.slice(0, 287) + '…';
+  return text;
+}
+
+// ---------- rendering ----------
+
+function el(tag, cls, parent) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  parent && parent.appendChild(e);
+  return e;
+}
+
+// Pick a pose via the character's emotion map: entries matching the wanted
+// code, else neutral; `seed` breaks ties between same-emotion variants.
+function pickPose(character, code, intensity, seed) {
+  let entries = character.map.filter(e => e.code === code);
+  if (!entries.length) entries = character.map.filter(e => e.code === NEUTRAL);
+  if (!entries.length) entries = character.map;
+  entries.sort((a, b) => Math.abs(a.intensity - intensity) -
+                         Math.abs(b.intensity - intensity));
+  const best = entries.filter(e => e.intensity === entries[0].intensity);
+  return character.poses[best[seed % best.length].pose];
+}
+
+// Emotion wheel codes, identified by inspecting the standard characters'
+// expressions: 1 happy, 2 coy, 3 bored, 4 scared, 5 sad, 6 angry,
+// 7 shouting, 8 laughing, 9 neutral.
+const EMOTION_RULES = [
+  [8, /\b(lo+l\w*|lmao+|rofl|a?ha(ha)+|hehe+|kek\w*|jaja(ja)*)\b|😂|🤣|:D|x[dD]\b/],
+  [7, /(^|\s)[A-Z'!?.]{4,}(\s|$)|!{2,}/],
+  [6, /\b(angry|furious|wtf|fuck\w*|shit|hate|goddamn|damn\w*|grr+)\b|>:\(|😠|😡|🖕/i],
+  [4, /\b(scared|afraid|terrified|yikes|eek|spooky|creepy|horror)\b|😱|😨|D:/i],
+  [5, /\b(sad|sigh|alas|cry\w*|crying|sorry|rip|miss (you|him|her))\b|:'?\(|☹|😢|😭/i],
+  [2, /;[)3]|😉|😏|\b(secret\w*|tease|wink|sneak\w*)\b|~$/i],
+  [3, /\b(bored|boring|meh|whatever|eh|zzz+|yawn)\b|🥱|🙄|shrug/i],
+  [1, /\b(nice|cool|great|good|love\w*|awesome|thanks|thank you|happy|yay|congrats)\b|:[)3]|😊|❤|♥/i],
+];
+
+// Stand-in for Comic Chat's text analysis: keyword/emoticon rules pick the
+// wheel emotion; bare "!" shouts, a trailing "?" gets the shrug.
+function emotionFor(text) {
+  for (const [code, re] of EMOTION_RULES) {
+    if (re.test(text))
+      return { code, intensity: /!/.test(text) ? 0xff : 0x99 };
+  }
+  if (/!$/.test(text)) return { code: 7, intensity: 0x99 };
+  if (/\?$/.test(text)) return { code: 3, intensity: 0x66 };
+  return { code: NEUTRAL, intensity: 0 };
+}
+
+function addChar(panel, character, pose, side, name) {
+  const c = el('div', `char ${side}` + (side === 'right' ? ' flip' : ''), panel);
+  const img = el('img', null, c);
+  img.src = `${ASSETS}${character.dir}/${pose.file}`;
+  img.alt = character.name;
+  const tag = el('div', `nametag ${side}`, panel);
+  tag.textContent = name;
+}
+
+function render(statuses) {
+  const strip = document.getElementById('strip');
+  strip.innerHTML = '';
+  const cast = makeCast(statuses);
+  const bg = manifest.backgrounds[hash(statuses[0].id) % manifest.backgrounds.length];
+
+  statuses.forEach((st, i) => {
+    const panel = el('div', 'panel', strip);
+    panel.style.backgroundImage = `url(${ASSETS}${bg.file})`;
+
+    const acct = st.account.acct;
+    const speaker = cast.get(acct);
+    // The previous distinct speaker listens from the other side of the panel.
+    let listener = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (statuses[j].account.acct !== acct) {
+        listener = statuses[j].account;
+        break;
+      }
+    }
+
+    const side = listener ? (i % 2 ? 'right' : 'left') : 'left';
+    const other = side === 'left' ? 'right' : 'left';
+
+    // Speaker gets an expressive pose; the listener stays neutral.
+    const text = plainText(st);
+    const seed = hash(st.id);
+    const emo = emotionFor(text);
+    addChar(panel, speaker, pickPose(speaker, emo.code, emo.intensity, seed),
+            side, st.account.display_name || acct);
+    if (listener) {
+      const lchar = cast.get(listener.acct);
+      addChar(panel, lchar, pickPose(lchar, NEUTRAL, 0, seed), other,
+              listener.display_name || listener.acct);
+    }
+
+    const balloon = el('div', `balloon ${side}`, panel);
+    balloon.textContent = text;
+    el('div', 'tail', balloon);
+  });
+}
+
+// ---------- main ----------
+
+async function view(url) {
+  const status = document.getElementById('status');
+  try {
+    status.textContent = 'Loading…';
+    const { host, id } = parseNoticeUrl(url);
+    const statuses = await fetchThread(host, id);
+    render(statuses);
+    status.textContent = `${statuses.length} posts, ` +
+      `${new Set(statuses.map(s => s.account.acct)).size} participants`;
+    history.replaceState(null, '', '#' + encodeURIComponent(url));
+  } catch (e) {
+    status.textContent = e.message;
+  }
+}
+
+document.getElementById('go').onclick = () =>
+  view(document.getElementById('url').value);
+document.getElementById('url').addEventListener('keydown', e => {
+  if (e.key === 'Enter') view(e.target.value);
+});
+
+(async () => {
+  manifest = await (await fetch(ASSETS + 'manifest.json')).json();
+  const initial = location.hash
+    ? decodeURIComponent(location.hash.slice(1))
+    : 'https://lain.com/notice/B7DYQJk0qO1wZnEi4O';
+  document.getElementById('url').value = initial;
+  view(initial);
+})();
+</script>
+</body>
+</html>
