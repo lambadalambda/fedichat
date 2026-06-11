@@ -86,6 +86,18 @@
     inset: 0;
     pointer-events: none;
   }
+  .narration {
+    position: absolute;
+    box-sizing: border-box;
+    left: 4px;
+    width: calc(100% - 8px);
+    background: white;
+    border: 1px solid black;
+    padding: 2px 6px;
+    font-size: 10px;
+    line-height: 13px;
+    white-space: pre-line;
+  }
   .title-panel {
     box-sizing: border-box;
     padding: 14px 12px;
@@ -398,12 +410,29 @@ function wrapLines(text, innerW) {
   return lines;
 }
 
+// Semantic backgrounds (§6.3): topical keywords swap the scene for one
+// panel. The five Woodring backgrounds map to rough moods.
+const SEMANTIC_BGS = [
+  ['volcano', /\b(fire|burn\w*|flame\w*|hell|war|gulag|explo\w*|rage|destroy\w*)\b/i],
+  ['den', /\b(home|cozy|comfy|couch|sleep\w*|bed|tired|night)\b/i],
+  ['field', /\b(outside|nature|walk|hik\w*|sunny|weather|park|grass)\b/i],
+  ['pastoral', /\b(peace\w*|calm|chill\w*|relax\w*|zen|serene)\b/i],
+];
+
+function semanticBg(texts) {
+  for (const [name, re] of SEMANTIC_BGS) {
+    if (texts.some(t => re.test(t)))
+      return manifest.backgrounds.find(b => b.name === name);
+  }
+  return null;
+}
+
 // PlaceBalloons with routing channels: each balloon keeps a clear vertical
 // corridor for its tail; later balloons' channels are trimmed so earlier
 // corridors survive (MaxAllowable), and placing a balloon shrinks earlier
 // channels away from its extent (ReduceChannel). Returns null if a balloon
 // can't be placed (panel break), unless `relax` (single-utterance panels).
-function layoutBalloons(utts, relax) {
+function layoutBalloons(utts, relax, yStart = 0) {
   const placed = [];
   const channels = [];
   for (const u of utts) {
@@ -447,13 +476,13 @@ function layoutBalloons(utts, relax) {
     // Vertical: as high as possible, but reading order requires staying
     // below the bottom of balloons to the right, and no higher than the
     // top of balloons to the left; never overlap an earlier balloon.
-    let t = 4;
+    let t = yStart + 4;
     for (const p of placed) {
       const overlap = p.l < l + w && l < p.l + p.w;
       if (p.l + p.w / 2 > l + w / 2 || overlap) t = Math.max(t, p.b + 4);
       else t = Math.max(t, p.t);
     }
-    if (t + h > BALLOON_ZONE + (relax ? 60 : 16)) return null;
+    if (t + h > BALLOON_ZONE + yStart + (relax ? 60 : 16)) return null;
 
     placed.push({ l, t, w, h, b: t + h, lines,
                   tailX: Math.min(Math.max(u.faceX, l + 10), l + w - 12) });
@@ -518,6 +547,7 @@ function render(statuses, title) {
     const emo = emotionFor(text);
     return {
       acct: st.account.acct, text, emo,
+      cw: st.spoiler_text || null,
       seed: hash(st.id),
       addressee: addresseeOf(st, statuses, i, participants),
       // Balloon vocabulary (§5.1): non-public posts whisper, *actions*
@@ -542,9 +572,20 @@ function render(statuses, title) {
     const arr = arrange(members, addrMap, prevNeighbors);
     const xs = new Map(arr.map(
       (m, k) => [m.acct, (k + 0.5) * PANEL_W / arr.length]));
+    // Content warnings become narration boxes at the top of the panel;
+    // balloons go below them (paper §8).
+    const narrations = [];
+    let yStart = 0;
+    for (const u of us) {
+      if (!u.cw) continue;
+      const lines = wrapLines(('CW: ' + u.cw).toUpperCase(), PANEL_W - 24);
+      const h = lines.length * 13 + 6;
+      narrations.push({ t: yStart + 3, h, lines });
+      yStart += h + 5;
+    }
     const balloons = layoutBalloons(
-      us.map(u => ({ ...u, faceX: xs.get(u.acct) })), us.length === 1);
-    return balloons && { arr, balloons };
+      us.map(u => ({ ...u, faceX: xs.get(u.acct) })), us.length === 1, yStart);
+    return balloons && { arr, balloons, narrations };
   }
 
   // Panel breaks (§6.1): same speaker again, a 5th character, balloons not
@@ -580,8 +621,9 @@ function render(statuses, title) {
   panels.forEach((p, pi) => {
     const panel = el('div', 'panel', strip);
     const scene = el('div', 'scene', panel);
-    scene.style.backgroundImage = `url(${ASSETS}${bg.file})`;
-    const { arr, balloons } = p.layout;
+    const pbg = semanticBg(p.utts.map(u => u.text)) || bg;
+    scene.style.backgroundImage = `url(${ASSETS}${pbg.file})`;
+    const { arr, balloons, narrations } = p.layout;
 
     // Camera zoom (§6.2): pull in as far as the shot allows -- outermost
     // characters must stay in frame, nobody gets cut at the neck (z<=2 keeps
@@ -618,6 +660,13 @@ function render(statuses, title) {
     const shapes = mksvg('shapes'); // balloon bodies, under the text divs
     panel.appendChild(shapes);
     const svg = mksvg('tails');     // tails, over everything
+
+    for (const nb of narrations) {
+      const div = el('div', 'narration', panel);
+      div.style.top = nb.t + 'px';
+      div.style.height = nb.h + 'px';
+      div.textContent = nb.lines.join('\n');
+    }
 
     p.utts.forEach((u, j) => {
       const b = balloons[j];
@@ -681,9 +730,12 @@ const FIXTURE = [
   ['carol', 'sorry :('],
   ['alice', 'psst this is a secret', 'direct'],
   ['bob', '*wonders what they are plotting*'],
-].map(([who, text, vis], i) => ({
+  ['carol', 'this whole thread should burn in hell'],
+  ['alice', 'anyway here are my cat pics', 'public', 'cat pictures'],
+].map(([who, text, vis, cw], i) => ({
   id: 'fx' + i, account: { acct: who, display_name: who },
   content: text, media_attachments: [], visibility: vis || 'public',
+  spoiler_text: cw || '',
 }));
 
 async function view(url) {
