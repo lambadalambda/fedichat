@@ -1,6 +1,5 @@
 # Open issues
 
-- [ ] [Identify gesture codes and add gesture text rules](issues/identify-gesture-codes.md)
 - [ ] [Panel composition: character inclusion, placement and facing](issues/panel-composition.md)
 - [ ] [Multiple balloons per panel with routing-channel layout](issues/balloon-layout.md)
 - [ ] [Camera zoom variation](issues/camera-zoom.md)

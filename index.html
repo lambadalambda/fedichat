@@ -238,13 +238,26 @@ const EMOTION_RULES = [
   [1, /\b(nice|cool|great|good|love\w*|awesome|thanks|thank you|happy|yay|congrats)\b|:[)3]|😊|❤|♥/i],
 ];
 
+// Gesture codes live on bodies: 10 wave, 11 point at other, 12 point at
+// self, 14 open arms. Text cues from the paper (§4.1).
+const GESTURE_RULES = [
+  [10, /^(hi+|hiya|hello+|hey+|yo|bye+|goodbye|cya|see ya|welcome|greetings|o\/)\b|\bbrb\b/i],
+  [12, /^(i|i'm|i'll|i'd|i've|imho|imo)\b/i],
+  [11, /^(you|you're|you'll|are you|will you|did you|do you|don't you|u)\b/i],
+];
+
 // Stand-in for Comic Chat's text analysis: keyword/emoticon rules pick the
-// wheel emotion; bare "!" shouts, a trailing "?" gets the shrug.
+// wheel emotion, sentence-start cues pick gestures. A strong (exclaimed)
+// emotion beats a gesture; a gesture beats a calm emotion (the paper found
+// gestures read better in comics than subtle expressions). Bare "!" shouts,
+// a trailing "?" gets the shrug.
 function emotionFor(text) {
-  for (const [code, re] of EMOTION_RULES) {
-    if (re.test(text))
-      return { code, intensity: /!/.test(text) ? 0xff : 0x99 };
-  }
+  const emo = EMOTION_RULES.find(([, re]) => re.test(text));
+  const loud = /!/.test(text);
+  if (emo && loud) return { code: emo[0], intensity: 0xff };
+  const gest = GESTURE_RULES.find(([, re]) => re.test(text));
+  if (gest) return { code: gest[0], intensity: 0xff };
+  if (emo) return { code: emo[0], intensity: 0x99 };
   if (/!$/.test(text)) return { code: 7, intensity: 0x99 };
   if (/\?$/.test(text)) return { code: 3, intensity: 0x66 };
   return { code: NEUTRAL, intensity: 0 };
@@ -303,10 +316,28 @@ function render(statuses) {
 
 // ---------- main ----------
 
+// Dev fixture: type "test" instead of a URL.
+const FIXTURE = [
+  ['alice', 'hi everyone'],
+  ['bob', 'you must be new here'],
+  ['alice', "I think this place is great"],
+  ['carol', 'WHAT IS GOING ON'],
+  ['bob', 'lol calm down'],
+  ['carol', 'sorry :('],
+].map(([who, text], i) => ({
+  id: 'fx' + i, account: { acct: who, display_name: who },
+  content: text, media_attachments: [],
+}));
+
 async function view(url) {
   const status = document.getElementById('status');
   try {
     status.textContent = 'Loading…';
+    if (url.trim() === 'test') {
+      render(FIXTURE);
+      status.textContent = 'test fixture';
+      return;
+    }
     const { host, id } = parseNoticeUrl(url);
     const statuses = await fetchThread(host, id);
     render(statuses);

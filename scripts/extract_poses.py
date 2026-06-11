@@ -14,7 +14,9 @@ Chunk item layouts (after the 12 bytes of image/mask1/mask2 pointers):
 
 Emotion codes (identified visually from the standard characters):
   1 happy, 2 coy, 3 bored, 4 scared, 5 sad, 6 angry, 7 shouting,
-  8 laughing, 9 neutral (wheel center), >9 gestures.
+  8 laughing, 9 neutral (wheel center).
+Gesture codes (bodies only, identified the same way):
+  10 wave, 11 point at other, 12 point at self, 14 open arms.
 """
 import json
 import struct
@@ -182,19 +184,25 @@ def extract_character(path, outdir):
             posemap.append(dict(code=e['code'], intensity=e['intensity'],
                                 pose=seen[e['ptr']]))
     else:
-        # One composed pose per head-map entry; body chosen by the same emotion.
-        for e in heads:
-            body = closest(bodies, e['code'], e['intensity'])
-            key = (e['ptr'], body['ptr'])
+        def emit(head, body, code, intensity):
+            key = (head['ptr'], body['ptr'])
             if key not in seen:
                 img, mouth = compose(get_image(data, cache, body), body,
-                                     get_image(data, cache, e), e)
+                                     get_image(data, cache, head), head)
                 fn = f'pose{len(poses):02d}.png'
                 img.save(chardir / fn)
                 seen[key] = len(poses)
                 poses.append(dict(file=fn, w=img.width, h=img.height, mouth=mouth))
-            posemap.append(dict(code=e['code'], intensity=e['intensity'],
-                                pose=seen[key]))
+            posemap.append(dict(code=code, intensity=intensity, pose=seen[key]))
+
+        # One composed pose per head-map entry; body chosen by the same emotion.
+        for e in heads:
+            emit(e, closest(bodies, e['code'], e['intensity']), e['code'],
+                 e['intensity'])
+        # Gesture codes (>9) exist only on bodies; pair them with a neutral head.
+        for b in bodies:
+            if b['code'] > NEUTRAL:
+                emit(closest(heads, NEUTRAL, 0), b, b['code'], b['intensity'])
 
     return dict(name=name, dir=path.stem, poses=poses, map=posemap)
 
