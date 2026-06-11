@@ -50,6 +50,10 @@
     height: var(--panel-h);
     border: 1px solid black;
     overflow: hidden;
+  }
+  .scene {
+    position: absolute;
+    inset: 0;
     background-size: cover;
     background-position: center bottom;
   }
@@ -71,6 +75,7 @@
     padding: 5px 8px;
     font-size: 12px;
     line-height: 15px;
+    white-space: pre-line;
     overflow-wrap: break-word;
   }
   .tails {
@@ -233,14 +238,16 @@ function emotionFor(text) {
   return { code: NEUTRAL, intensity: 0 };
 }
 
-function addChar(panel, character, pose, xPct, flip, name) {
-  const c = el('div', 'char' + (flip ? ' flip' : ''), panel);
+// Character goes in the (zoomable) scene; the nametag stays on the panel at
+// the character's zoomed position.
+function addChar(scene, panel, character, pose, xPct, flip, name, z) {
+  const c = el('div', 'char' + (flip ? ' flip' : ''), scene);
   c.style.left = xPct + '%';
   const img = el('img', null, c);
   img.src = `${ASSETS}${character.dir}/${pose.file}`;
   img.alt = character.name;
   const tag = el('div', 'nametag', panel);
-  tag.style.left = xPct + '%';
+  tag.style.left = (50 + (xPct - 50) * z) + '%';
   tag.textContent = name;
 }
 
@@ -309,9 +316,22 @@ const measurer = document.createElement('canvas').getContext('2d');
 measurer.font = '12px "Comic Sans MS", "Comic Neue", cursive';
 
 function wrapLines(text, innerW) {
+  // Break words wider than the balloon (URLs) into fitting chunks first.
+  const words = text.split(/\s+/).flatMap(w => {
+    const out = [];
+    while (measurer.measureText(w).width > innerW && w.length > 1) {
+      let cut = w.length - 1;
+      while (cut > 1 && measurer.measureText(w.slice(0, cut)).width > innerW)
+        cut--;
+      out.push(w.slice(0, cut));
+      w = w.slice(cut);
+    }
+    out.push(w);
+    return out;
+  });
   const lines = [];
   let cur = '';
-  for (const word of text.split(/\s+/)) {
+  for (const word of words) {
     const t = cur ? cur + ' ' + word : word;
     if (!cur || measurer.measureText(t).width <= innerW) cur = t;
     else { lines.push(cur); cur = word; }
@@ -466,10 +486,26 @@ function render(statuses) {
   }
   commit();
 
-  for (const p of panels) {
+  panels.forEach((p, pi) => {
     const panel = el('div', 'panel', strip);
-    panel.style.backgroundImage = `url(${ASSETS}${bg.file})`;
+    const scene = el('div', 'scene', panel);
+    scene.style.backgroundImage = `url(${ASSETS}${bg.file})`;
     const { arr, balloons } = p.layout;
+
+    // Camera zoom (§6.2): pull in as far as the shot allows -- outermost
+    // characters must stay in frame, nobody gets cut at the neck (z<=2 keeps
+    // the cut at the waist) or at the ankles (skip the 1.05-1.3 band).
+    // Establishing shot for the first panel and every ~15th.
+    const n = arr.length;
+    const zFrame = n > 1
+      ? (PANEL_W / 2 - 38) / (PANEL_W / 2 - PANEL_W / (2 * n)) : 2;
+    let z = [1, 1.45, 1.7, 1.95][p.utts[0].seed % 4];
+    z = Math.max(1, Math.min(z, zFrame, 2));
+    if (z > 1.05 && z < 1.3) z = 1.3;
+    if (pi % 15 === 0) z = 1;
+    const charTop = PANEL_H - CHAR_H;
+    scene.style.transform = `scale(${z})`;
+    scene.style.transformOrigin = `50% ${charTop}px`;
 
     arr.forEach((m, k) => {
       const ch = cast.get(m.acct);
@@ -477,8 +513,8 @@ function render(statuses) {
       const pose = u
         ? pickPose(ch, u.emo.code, u.emo.intensity, u.seed)
         : pickPose(ch, NEUTRAL, 0, (p.utts[0].seed ^ hash(m.acct)) >>> 0);
-      addChar(panel, ch, pose, (k + 0.5) * 100 / arr.length,
-              m.facing === 'left', names.get(m.acct));
+      addChar(scene, panel, ch, pose, (k + 0.5) * 100 / arr.length,
+              m.facing === 'left', names.get(m.acct), z);
     });
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -491,11 +527,12 @@ function render(statuses) {
       div.style.top = b.t + 'px';
       div.style.width = b.w + 'px';
       div.style.height = b.h + 'px';
-      div.textContent = u.text;
+      div.textContent = b.lines.join('\n');
 
       const k = arr.findIndex(m => m.acct === u.acct);
-      const faceX = (k + 0.5) * PANEL_W / arr.length;
-      const faceY = PANEL_H - CHAR_H + 14;
+      const fx = (k + 0.5) * PANEL_W / arr.length;
+      const faceX = PANEL_W / 2 + (fx - PANEL_W / 2) * z;
+      const faceY = charTop + 14 * z;
       const ns = svg.namespaceURI;
       const tail = document.createElementNS(ns, 'polygon');
       tail.setAttribute('points',
@@ -510,7 +547,7 @@ function render(statuses) {
       svg.appendChild(gap);
     });
     panel.appendChild(svg);
-  }
+  });
 }
 
 // ---------- main ----------
