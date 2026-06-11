@@ -1,6 +1,5 @@
 # Open issues
 
-- [ ] [Panel composition: character inclusion, placement and facing](issues/panel-composition.md)
 - [ ] [Multiple balloons per panel with routing-channel layout](issues/balloon-layout.md)
 - [ ] [Camera zoom variation](issues/camera-zoom.md)
 - [ ] [Balloon styles: wavy outlines, balloon types, comic lettering](issues/balloon-styles.md)

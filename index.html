@@ -56,11 +56,10 @@
     position: absolute;
     bottom: 0;
     height: 58%;
+    transform: translateX(-50%);
     image-rendering: auto;
   }
   .char img { height: 100%; }
-  .char.left  { left: 4%; }
-  .char.right { right: 4%; }
   .char.flip img { transform: scaleX(-1); }
   .balloon {
     position: absolute;
@@ -110,17 +109,16 @@
   .nametag {
     position: absolute;
     bottom: 2px;
+    transform: translateX(-50%);
     font-size: 10px;
     background: rgba(255,255,255,.85);
     border: 1px solid black;
     padding: 0 4px;
-    max-width: 44%;
+    max-width: 30%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .nametag.left  { left: 2px; }
-  .nametag.right { right: 2px; }
 </style>
 </head>
 <body>
@@ -221,7 +219,7 @@ function pickPose(character, code, intensity, seed) {
   entries.sort((a, b) => Math.abs(a.intensity - intensity) -
                          Math.abs(b.intensity - intensity));
   const best = entries.filter(e => e.intensity === entries[0].intensity);
-  return character.poses[best[seed % best.length].pose];
+  return character.poses[best[(seed >>> 0) % best.length].pose];
 }
 
 // Emotion wheel codes, identified by inspecting the standard characters'
@@ -263,13 +261,80 @@ function emotionFor(text) {
   return { code: NEUTRAL, intensity: 0 };
 }
 
-function addChar(panel, character, pose, side, name) {
-  const c = el('div', `char ${side}` + (side === 'right' ? ' flip' : ''), panel);
+function addChar(panel, character, pose, xPct, flip, name) {
+  const c = el('div', 'char' + (flip ? ' flip' : ''), panel);
+  c.style.left = xPct + '%';
   const img = el('img', null, c);
   img.src = `${ASSETS}${character.dir}/${pose.file}`;
   img.alt = character.name;
-  const tag = el('div', `nametag ${side}`, panel);
+  const tag = el('div', 'nametag', panel);
+  tag.style.left = xPct + '%';
   tag.textContent = name;
+}
+
+// ---------- panel arrangement (paper §4.3) ----------
+// An arrangement is an ordered list of {acct, facing}. The art faces right
+// by default, so facing 'left' means mirrored.
+
+const faces = (arr, ai, bi) =>
+  bi < ai ? arr[ai].facing === 'left' : arr[ai].facing === 'right';
+
+// The paper's evaluation function: Facing penalties over ordered pairs,
+// plus Neighbors penalties against the previous panel's arrangement.
+function panelCost(arr, speaker, addressee, prevNeighbors) {
+  let cost = 0;
+  for (let ai = 0; ai < arr.length; ai++) {
+    for (let bi = 0; bi < arr.length; bi++) {
+      if (ai === bi) continue;
+      const aAddressed = arr[ai].acct === speaker && addressee != null;
+      if (!aAddressed) {
+        if (!faces(arr, ai, bi)) cost += 4;
+        if (!faces(arr, bi, ai)) cost += 2;
+      } else if (arr[bi].acct === addressee) {
+        if (!faces(arr, bi, ai)) cost += 4;
+        if (!faces(arr, ai, bi)) cost += 40;
+        cost += 4 * (Math.abs(ai - bi) - 1);
+      }
+    }
+  }
+  arr.forEach((m, k) => {
+    const prev = prevNeighbors.get(m.acct);
+    if (!prev) return;
+    if ((k > 0 ? arr[k - 1].acct : null) !== prev.left) cost += 1;
+    if ((k < arr.length - 1 ? arr[k + 1].acct : null) !== prev.right) cost += 1;
+  });
+  return cost;
+}
+
+// Greedy placement: insert each character at the position/orientation that
+// minimizes the running cost (paper §4.3).
+function arrange(members, speaker, addressee, prevNeighbors) {
+  let arr = [];
+  for (const acct of members) {
+    let best = null;
+    for (let p = 0; p <= arr.length; p++) {
+      for (const facing of ['right', 'left']) {
+        const cand = [...arr.slice(0, p), { acct, facing }, ...arr.slice(p)];
+        const c = panelCost(cand, speaker, addressee, prevNeighbors);
+        if (!best || c < best.c) best = { cand, c };
+      }
+    }
+    arr = best.cand;
+  }
+  return arr;
+}
+
+// Who is this post talking to? First mention that's a thread participant,
+// else the previous distinct speaker.
+function addresseeOf(st, statuses, i, participants) {
+  const m = (st.mentions || []).find(
+    x => participants.has(x.acct) && x.acct !== st.account.acct);
+  if (m) return m.acct;
+  for (let j = i - 1; j >= 0; j--) {
+    if (statuses[j].account.acct !== st.account.acct)
+      return statuses[j].account.acct;
+  }
+  return null;
 }
 
 function render(statuses) {
@@ -278,36 +343,48 @@ function render(statuses) {
   const cast = makeCast(statuses);
   const bg = manifest.backgrounds[hash(statuses[0].id) % manifest.backgrounds.length];
 
+  const participants = new Set(statuses.map(s => s.account.acct));
+  const names = new Map(statuses.map(
+    s => [s.account.acct, s.account.display_name || s.account.acct]));
+  const prevNeighbors = new Map();
+
   statuses.forEach((st, i) => {
     const panel = el('div', 'panel', strip);
     panel.style.backgroundImage = `url(${ASSETS}${bg.file})`;
 
     const acct = st.account.acct;
-    const speaker = cast.get(acct);
-    // The previous distinct speaker listens from the other side of the panel.
-    let listener = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (statuses[j].account.acct !== acct) {
-        listener = statuses[j].account;
-        break;
-      }
-    }
-
-    const side = listener ? (i % 2 ? 'right' : 'left') : 'left';
-    const other = side === 'left' ? 'right' : 'left';
-
-    // Speaker gets an expressive pose; the listener stays neutral.
     const text = plainText(st);
     const seed = hash(st.id);
     const emo = emotionFor(text);
-    addChar(panel, speaker, pickPose(speaker, emo.code, emo.intensity, seed),
-            side, st.account.display_name || acct);
-    if (listener) {
-      const lchar = cast.get(listener.acct);
-      addChar(panel, lchar, pickPose(lchar, NEUTRAL, 0, seed), other,
-              listener.display_name || listener.acct);
+
+    // Cast of this panel: speaker, addressee, then recent speakers (§4.2).
+    const addressee = addresseeOf(st, statuses, i, participants);
+    const members = [acct];
+    if (addressee && !members.includes(addressee)) members.push(addressee);
+    for (let j = i - 1; j >= 0 && members.length < 4; j--) {
+      const a = statuses[j].account.acct;
+      if (!members.includes(a) && i - j <= 3) members.push(a);
     }
 
+    const arr = arrange(members, acct, addressee, prevNeighbors);
+    arr.forEach((m, k) => prevNeighbors.set(m.acct, {
+      left: k > 0 ? arr[k - 1].acct : null,
+      right: k < arr.length - 1 ? arr[k + 1].acct : null,
+    }));
+
+    let speakerX = 50;
+    arr.forEach((m, k) => {
+      const x = (k + 0.5) * 100 / arr.length;
+      const ch = cast.get(m.acct);
+      const isSpeaker = m.acct === acct;
+      const pose = isSpeaker
+        ? pickPose(ch, emo.code, emo.intensity, seed)
+        : pickPose(ch, NEUTRAL, 0, seed ^ hash(m.acct));
+      addChar(panel, ch, pose, x, m.facing === 'left', names.get(m.acct));
+      if (isSpeaker) speakerX = x;
+    });
+
+    const side = speakerX <= 50 ? 'left' : 'right';
     const balloon = el('div', `balloon ${side}`, panel);
     balloon.textContent = text;
     el('div', 'tail', balloon);
