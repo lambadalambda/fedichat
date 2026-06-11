@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
-    --panel-w: 300px;
-    --panel-h: 260px;
+    --panel-w: 320px;
+    --panel-h: 280px;
   }
   body {
     font-family: "Comic Sans MS", "Comic Neue", cursive;
@@ -38,7 +38,8 @@
   #status { padding: 8px 12px; font-size: 13px; }
   #strip {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(var(--panel-w), 1fr));
+    grid-template-columns: repeat(auto-fill, var(--panel-w));
+    justify-content: center;
     gap: 0;
     background: white;
     margin: 12px;
@@ -63,48 +64,19 @@
   .char.flip img { transform: scaleX(-1); }
   .balloon {
     position: absolute;
-    top: 6px;
-    max-width: 62%;
+    box-sizing: border-box;
     background: white;
     border: 1px solid black;
     border-radius: 10px;
-    padding: 6px 9px;
+    padding: 5px 8px;
     font-size: 12px;
-    line-height: 1.25;
+    line-height: 15px;
     overflow-wrap: break-word;
   }
-  .balloon.left  { left: 4%; }
-  .balloon.right { right: 4%; }
-  .balloon .tail {
+  .tails {
     position: absolute;
-    bottom: -14px;
-    width: 14px;
-    height: 15px;
-    overflow: hidden;
-  }
-  .balloon.left  .tail { left: 18%; }
-  .balloon.right .tail { right: 18%; }
-  .balloon .tail::before {
-    content: "";
-    position: absolute;
-    top: -1px;
-    left: 0;
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 9px solid transparent;
-    border-top: 15px solid black;
-  }
-  .balloon .tail::after {
-    content: "";
-    position: absolute;
-    top: -2px;
-    left: 1px;
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 7px solid transparent;
-    border-top: 13px solid white;
+    inset: 0;
+    pointer-events: none;
   }
   .nametag {
     position: absolute;
@@ -281,16 +253,17 @@ const faces = (arr, ai, bi) =>
 
 // The paper's evaluation function: Facing penalties over ordered pairs,
 // plus Neighbors penalties against the previous panel's arrangement.
-function panelCost(arr, speaker, addressee, prevNeighbors) {
+// addrMap: speaker acct -> addressee acct (or null) for this panel.
+function panelCost(arr, addrMap, prevNeighbors) {
   let cost = 0;
   for (let ai = 0; ai < arr.length; ai++) {
     for (let bi = 0; bi < arr.length; bi++) {
       if (ai === bi) continue;
-      const aAddressed = arr[ai].acct === speaker && addressee != null;
-      if (!aAddressed) {
+      const target = addrMap.get(arr[ai].acct);
+      if (!target) {
         if (!faces(arr, ai, bi)) cost += 4;
         if (!faces(arr, bi, ai)) cost += 2;
-      } else if (arr[bi].acct === addressee) {
+      } else if (arr[bi].acct === target) {
         if (!faces(arr, bi, ai)) cost += 4;
         if (!faces(arr, ai, bi)) cost += 40;
         cost += 4 * (Math.abs(ai - bi) - 1);
@@ -308,20 +281,109 @@ function panelCost(arr, speaker, addressee, prevNeighbors) {
 
 // Greedy placement: insert each character at the position/orientation that
 // minimizes the running cost (paper §4.3).
-function arrange(members, speaker, addressee, prevNeighbors) {
+function arrange(members, addrMap, prevNeighbors) {
   let arr = [];
   for (const acct of members) {
     let best = null;
     for (let p = 0; p <= arr.length; p++) {
       for (const facing of ['right', 'left']) {
         const cand = [...arr.slice(0, p), { acct, facing }, ...arr.slice(p)];
-        const c = panelCost(cand, speaker, addressee, prevNeighbors);
+        const c = panelCost(cand, addrMap, prevNeighbors);
         if (!best || c < best.c) best = { cand, c };
       }
     }
     arr = best.cand;
   }
   return arr;
+}
+
+// ---------- balloon layout (paper §5.2) ----------
+
+const PANEL_W = 320, PANEL_H = 280;
+const CHAR_H = Math.round(0.58 * PANEL_H);
+const BALLOON_ZONE = PANEL_H - CHAR_H - 8; // balloons live above the heads
+const LINE_H = 15, PAD_X = 8, PAD_Y = 5;
+const TAIL_T = 16; // routing channel corridor width
+
+const measurer = document.createElement('canvas').getContext('2d');
+measurer.font = '12px "Comic Sans MS", "Comic Neue", cursive';
+
+function wrapLines(text, innerW) {
+  const lines = [];
+  let cur = '';
+  for (const word of text.split(/\s+/)) {
+    const t = cur ? cur + ' ' + word : word;
+    if (!cur || measurer.measureText(t).width <= innerW) cur = t;
+    else { lines.push(cur); cur = word; }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+// PlaceBalloons with routing channels: each balloon keeps a clear vertical
+// corridor for its tail; later balloons' channels are trimmed so earlier
+// corridors survive (MaxAllowable), and placing a balloon shrinks earlier
+// channels away from its extent (ReduceChannel). Returns null if a balloon
+// can't be placed (panel break), unless `relax` (single-utterance panels).
+function layoutBalloons(utts, relax) {
+  const placed = [];
+  const channels = [];
+  for (const u of utts) {
+    const lineW = measurer.measureText(u.text).width + 2 * PAD_X + 4;
+    const maxW = PANEL_W - 12;
+    const minWordW = Math.min(maxW, 2 * PAD_X + 6 + Math.max(
+      ...u.text.split(/\s+/).map(w => measurer.measureText(w).width)));
+    let w = Math.min(lineW, maxW);
+    if (lineW > maxW) {
+      // Multi-line: width from text area over allowable height (paper),
+      // with a seeded nudge standing in for the paper's randomness.
+      const bottom = placed.length ? Math.max(...placed.map(p => p.b)) : 0;
+      const allowH = Math.max(LINE_H, BALLOON_ZONE - bottom - 4);
+      const area = lineW * LINE_H * 4 / 3;
+      w = Math.max(minWordW, Math.min(maxW, area / allowH));
+      w = Math.min(maxW, w + (u.seed % 40));
+    }
+
+    // Routing channel: widest extent passing over the speaker's face.
+    const ch = {
+      l: Math.max(6, u.faceX - w),
+      r: Math.min(PANEL_W - 6, u.faceX + w),
+    };
+    channels.forEach((c, k) => {
+      const xi = utts[k].faceX;
+      if (xi < u.faceX) ch.l = Math.max(ch.l, xi + TAIL_T / 2);
+      else ch.r = Math.min(ch.r, xi - TAIL_T / 2);
+    });
+    if (ch.r - ch.l < minWordW) {
+      if (!relax) return null;
+      ch.l = 6; ch.r = PANEL_W - 6;
+    }
+    w = Math.min(w, ch.r - ch.l);
+
+    const lines = wrapLines(u.text, w - 2 * PAD_X - 2);
+    const h = lines.length * LINE_H + 2 * PAD_Y + 2;
+    const l = Math.min(Math.max(u.faceX - w / 2, ch.l), ch.r - w);
+
+    // Vertical: as high as possible, but reading order requires staying
+    // below the bottom of balloons to the right, and no higher than the
+    // top of balloons to the left; never overlap an earlier balloon.
+    let t = 4;
+    for (const p of placed) {
+      const overlap = p.l < l + w && l < p.l + p.w;
+      if (p.l + p.w / 2 > l + w / 2 || overlap) t = Math.max(t, p.b + 4);
+      else t = Math.max(t, p.t);
+    }
+    if (t + h > BALLOON_ZONE + (relax ? 60 : 16)) return null;
+
+    placed.push({ l, t, w, h, b: t + h, lines,
+                  tailX: Math.min(Math.max(u.faceX, l + 10), l + w - 12) });
+    channels.forEach((c, k) => {
+      if (utts[k].faceX < u.faceX) c.r = Math.min(c.r, l);
+      else c.l = Math.max(c.l, l + w);
+    });
+    channels.push(ch);
+  }
+  return placed;
 }
 
 // Who is this post talking to? First mention that's a thread participant,
@@ -348,47 +410,107 @@ function render(statuses) {
     s => [s.account.acct, s.account.display_name || s.account.acct]));
   const prevNeighbors = new Map();
 
-  statuses.forEach((st, i) => {
+  const utts = statuses.map((st, i) => ({
+    acct: st.account.acct,
+    text: plainText(st),
+    seed: hash(st.id),
+    emo: emotionFor(plainText(st)),
+    addressee: addresseeOf(st, statuses, i, participants),
+  }));
+
+  // Arrangement + balloon layout for one panel's utterances; null = no fit.
+  function tryLayout(us) {
+    const members = [];
+    for (const u of us) {
+      if (!members.includes(u.acct)) members.push(u.acct);
+      if (u.addressee && !members.includes(u.addressee))
+        members.push(u.addressee);
+    }
+    if (members.length > 4) return null;
+    const addrMap = new Map(us.map(u => [u.acct, u.addressee]));
+    const arr = arrange(members, addrMap, prevNeighbors);
+    const xs = new Map(arr.map(
+      (m, k) => [m.acct, (k + 0.5) * PANEL_W / arr.length]));
+    const balloons = layoutBalloons(
+      us.map(u => ({ ...u, faceX: xs.get(u.acct) })), us.length === 1);
+    return balloons && { arr, balloons };
+  }
+
+  // Panel breaks (§6.1): same speaker again, a 5th character, balloons not
+  // fitting, or (15%) right after a longer opening utterance.
+  const panels = [];
+  let cur = null;
+  const commit = () => {
+    if (!cur) return;
+    cur.layout.arr.forEach((m, k, a) => prevNeighbors.set(m.acct, {
+      left: k > 0 ? a[k - 1].acct : null,
+      right: k < a.length - 1 ? a[k + 1].acct : null,
+    }));
+  };
+  for (const u of utts) {
+    if (cur && !cur.closed && !cur.utts.some(p => p.acct === u.acct)) {
+      const layout = tryLayout([...cur.utts, u]);
+      if (layout) {
+        cur.utts.push(u);
+        cur.layout = layout;
+        continue;
+      }
+    }
+    commit();
+    cur = {
+      utts: [u],
+      layout: tryLayout([u]),
+      closed: u.text.split(' ').length > 6 && u.seed % 100 < 15,
+    };
+    panels.push(cur);
+  }
+  commit();
+
+  for (const p of panels) {
     const panel = el('div', 'panel', strip);
     panel.style.backgroundImage = `url(${ASSETS}${bg.file})`;
+    const { arr, balloons } = p.layout;
 
-    const acct = st.account.acct;
-    const text = plainText(st);
-    const seed = hash(st.id);
-    const emo = emotionFor(text);
-
-    // Cast of this panel: speaker, addressee, then recent speakers (§4.2).
-    const addressee = addresseeOf(st, statuses, i, participants);
-    const members = [acct];
-    if (addressee && !members.includes(addressee)) members.push(addressee);
-    for (let j = i - 1; j >= 0 && members.length < 4; j--) {
-      const a = statuses[j].account.acct;
-      if (!members.includes(a) && i - j <= 3) members.push(a);
-    }
-
-    const arr = arrange(members, acct, addressee, prevNeighbors);
-    arr.forEach((m, k) => prevNeighbors.set(m.acct, {
-      left: k > 0 ? arr[k - 1].acct : null,
-      right: k < arr.length - 1 ? arr[k + 1].acct : null,
-    }));
-
-    let speakerX = 50;
     arr.forEach((m, k) => {
-      const x = (k + 0.5) * 100 / arr.length;
       const ch = cast.get(m.acct);
-      const isSpeaker = m.acct === acct;
-      const pose = isSpeaker
-        ? pickPose(ch, emo.code, emo.intensity, seed)
-        : pickPose(ch, NEUTRAL, 0, seed ^ hash(m.acct));
-      addChar(panel, ch, pose, x, m.facing === 'left', names.get(m.acct));
-      if (isSpeaker) speakerX = x;
+      const u = p.utts.find(x => x.acct === m.acct);
+      const pose = u
+        ? pickPose(ch, u.emo.code, u.emo.intensity, u.seed)
+        : pickPose(ch, NEUTRAL, 0, (p.utts[0].seed ^ hash(m.acct)) >>> 0);
+      addChar(panel, ch, pose, (k + 0.5) * 100 / arr.length,
+              m.facing === 'left', names.get(m.acct));
     });
 
-    const side = speakerX <= 50 ? 'left' : 'right';
-    const balloon = el('div', `balloon ${side}`, panel);
-    balloon.textContent = text;
-    el('div', 'tail', balloon);
-  });
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'tails');
+    svg.setAttribute('viewBox', `0 0 ${PANEL_W} ${PANEL_H}`);
+    p.utts.forEach((u, j) => {
+      const b = balloons[j];
+      const div = el('div', 'balloon', panel);
+      div.style.left = b.l + 'px';
+      div.style.top = b.t + 'px';
+      div.style.width = b.w + 'px';
+      div.style.height = b.h + 'px';
+      div.textContent = u.text;
+
+      const k = arr.findIndex(m => m.acct === u.acct);
+      const faceX = (k + 0.5) * PANEL_W / arr.length;
+      const faceY = PANEL_H - CHAR_H + 14;
+      const ns = svg.namespaceURI;
+      const tail = document.createElementNS(ns, 'polygon');
+      tail.setAttribute('points',
+        `${b.tailX - 6},${b.b - 2} ${b.tailX + 8},${b.b - 2} ${faceX},${faceY}`);
+      tail.setAttribute('fill', 'white');
+      tail.setAttribute('stroke', 'black');
+      svg.appendChild(tail);
+      const gap = document.createElementNS(ns, 'line');
+      gap.setAttribute('x1', b.tailX - 5); gap.setAttribute('y1', b.b - 2);
+      gap.setAttribute('x2', b.tailX + 7); gap.setAttribute('y2', b.b - 2);
+      gap.setAttribute('stroke', 'white'); gap.setAttribute('stroke-width', 3);
+      svg.appendChild(gap);
+    });
+    panel.appendChild(svg);
+  }
 }
 
 // ---------- main ----------
