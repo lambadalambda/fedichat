@@ -76,6 +76,12 @@
     overflow-wrap: break-word;
   }
   .balloon.whisper { font-style: italic; }
+  .balloon img {
+    display: block;
+    margin: 2px auto 0;
+    border: 1px solid black;
+    filter: grayscale(1) contrast(1.05);
+  }
   .shapes {
     position: absolute;
     inset: 0;
@@ -121,10 +127,25 @@
     margin: 3px 0 3px 12px;
     text-align: left;
   }
-  .title-panel .star img {
+  .title-panel .star img.cast-icon {
     width: 28px;
     height: 28px;
     border: 1px solid black;
+  }
+  img.emoji {
+    height: 11px;
+    vertical-align: -2px;
+  }
+  #preview {
+    position: fixed;
+    display: none;
+    max-width: 60vw;
+    max-height: 60vh;
+    border: 2px solid black;
+    background: white;
+    padding: 3px;
+    z-index: 100;
+    pointer-events: none;
   }
   .nametag {
     position: absolute;
@@ -215,10 +236,58 @@ function plainText(st) {
     if (!prev || !prev.textContent.trim()) a.remove(); else break;
   }
   let text = doc.body.textContent.replace(/\s+/g, ' ').trim();
-  if (!text && st.media_attachments.length) text = '…';
-  if (st.media_attachments.length) text += ' [picture]';
+  // Images render inside the balloon; other attachments get a marker.
+  if (st.media_attachments.some(a => a.type !== 'image'))
+    text += ' [attachment]';
   if (text.length > 290) text = text.slice(0, 287) + '…';
-  return text;
+  return text.trim();
+}
+
+// Floating full-size preview for balloon pictures, shown on hover. Lives on
+// <body> so it isn't clipped by the panel.
+let previewEl = null;
+function bindPreview(img, media) {
+  if (!previewEl) {
+    previewEl = document.createElement('img');
+    previewEl.id = 'preview';
+    document.body.appendChild(previewEl);
+  }
+  img.addEventListener('mousemove', e => {
+    previewEl.src = media.full;
+    previewEl.style.display = 'block';
+    previewEl.style.left =
+      Math.max(4, Math.min(e.clientX + 14,
+        innerWidth - previewEl.offsetWidth - 8)) + 'px';
+    previewEl.style.top =
+      Math.max(4, Math.min(e.clientY + 14,
+        innerHeight - previewEl.offsetHeight - 8)) + 'px';
+  });
+  img.addEventListener('mouseleave', () => {
+    previewEl.style.display = 'none';
+  });
+}
+
+// Display name with :shortcode: custom emoji replaced by inline images
+// (resolved against the account's emojis list).
+function nameFrag(account) {
+  const frag = document.createDocumentFragment();
+  const name = account.display_name || account.acct;
+  const emojis = account.emojis || [];
+  const re = /:([\w-]+):/g;
+  let last = 0, m;
+  while ((m = re.exec(name))) {
+    const e = emojis.find(e => e.shortcode === m[1]);
+    if (!e) continue;
+    frag.append(name.slice(last, m.index));
+    const img = document.createElement('img');
+    img.className = 'emoji';
+    img.src = e.static_url || e.url;
+    img.alt = m[0];
+    frag.append(img);
+    last = m.index + m[0].length;
+  }
+  frag.append(name.slice(last));
+  return frag;
 }
 
 // ---------- rendering ----------
@@ -283,7 +352,7 @@ function emotionFor(text) {
 
 // Character goes in the (zoomable) scene; the nametag stays on the panel at
 // the character's zoomed position.
-function addChar(scene, panel, character, pose, xPct, flip, name, z) {
+function addChar(scene, panel, character, pose, xPct, flip, account, z) {
   const c = el('div', 'char' + (flip ? ' flip' : ''), scene);
   c.style.left = xPct + '%';
   const img = el('img', null, c);
@@ -291,7 +360,7 @@ function addChar(scene, panel, character, pose, xPct, flip, name, z) {
   img.alt = character.name;
   const tag = el('div', 'nametag', panel);
   tag.style.left = (50 + (xPct - 50) * z) + '%';
-  tag.textContent = name;
+  tag.appendChild(nameFrag(account));
 }
 
 // ---------- panel arrangement (paper §4.3) ----------
@@ -443,6 +512,7 @@ function layoutBalloons(utts, relax, yStart = 0) {
     const minWordW = Math.min(maxW, 2 * PAD_X + 6 + Math.max(
       ...text.split(/\s+/).map(w => measurer.measureText(w).width)));
     let w = Math.min(lineW, maxW);
+    if (u.media) w = Math.min(maxW, Math.max(w, 110));
     if (lineW > maxW) {
       // Multi-line: width from text area over allowable height (paper),
       // with a seeded nudge standing in for the paper's randomness.
@@ -469,8 +539,16 @@ function layoutBalloons(utts, relax, yStart = 0) {
     }
     w = Math.min(w, ch.r - ch.l);
 
-    const lines = wrapLines(text, w - 2 * PAD_X - 2);
-    const h = lines.length * LINE_H + 2 * PAD_Y + 2;
+    const lines = text ? wrapLines(text, w - 2 * PAD_X - 2) : [];
+    let imgW = 0, imgH = 0;
+    if (u.media) {
+      imgH = 64;
+      imgW = imgH * u.media.ar;
+      const availW = w - 2 * PAD_X - 2;
+      if (imgW > availW) { imgW = availW; imgH = imgW / u.media.ar; }
+    }
+    const h = lines.length * LINE_H + 2 * PAD_Y + 2
+      + (imgH ? imgH + (lines.length ? 4 : 0) + 2 : 0);
     const l = Math.min(Math.max(u.faceX - w / 2, ch.l), ch.r - w);
 
     // Vertical: as high as possible, but reading order requires staying
@@ -484,7 +562,7 @@ function layoutBalloons(utts, relax, yStart = 0) {
     }
     if (t + h > BALLOON_ZONE + yStart + (relax ? 60 : 16)) return null;
 
-    placed.push({ l, t, w, h, b: t + h, lines,
+    placed.push({ l, t, w, h, b: t + h, lines, imgW, imgH,
                   tailX: Math.min(Math.max(u.faceX, l + 10), l + w - 12) });
     channels.forEach((c, k) => {
       if (utts[k].faceX < u.faceX) c.r = Math.min(c.r, l);
@@ -528,25 +606,32 @@ function render(statuses, title) {
         const row = el('div', 'star', tp);
         const ch = cast.get(acct);
         if (ch.icon) {
-          const img = el('img', null, row);
+          const img = el('img', 'cast-icon', row);
           img.src = `${ASSETS}${ch.dir}/${ch.icon}`;
         }
         const who = statuses.find(s => s.account.acct === acct).account;
-        el('span', null, row).textContent =
-          `${who.display_name || acct} as ${ch.name}`;
+        const span = el('span', null, row);
+        span.appendChild(nameFrag(who));
+        span.append(` as ${ch.name}`);
       });
   }
 
   const participants = new Set(statuses.map(s => s.account.acct));
-  const names = new Map(statuses.map(
-    s => [s.account.acct, s.account.display_name || s.account.acct]));
+  const names = new Map(statuses.map(s => [s.account.acct, s.account]));
   const prevNeighbors = new Map();
 
   const utts = statuses.map((st, i) => {
     const text = plainText(st);
     const emo = emotionFor(text);
+    const img = st.media_attachments.find(a => a.type === 'image');
+    const dims = img && (img.meta?.original || img.meta?.small);
     return {
       acct: st.account.acct, text, emo,
+      media: img ? {
+        url: img.preview_url || img.url,
+        full: img.url || img.preview_url,
+        ar: dims && dims.width && dims.height ? dims.width / dims.height : 4 / 3,
+      } : null,
       cw: st.spoiler_text || null,
       seed: hash(st.id),
       addressee: addresseeOf(st, statuses, i, participants),
@@ -684,6 +769,14 @@ function render(statuses, title) {
       div.style.width = b.w + 'px';
       div.style.height = b.h + 'px';
       div.textContent = b.lines.join('\n');
+      if (u.media && b.imgH) {
+        const im = el('img', null, div);
+        im.src = u.media.url;
+        im.width = Math.round(b.imgW);
+        im.height = Math.round(b.imgH);
+        im.loading = 'lazy';
+        bindPreview(im, u.media);
+      }
 
       const k = arr.findIndex(m => m.acct === u.acct);
       const fx = (k + 0.5) * PANEL_W / arr.length;
@@ -732,10 +825,22 @@ const FIXTURE = [
   ['bob', '*wonders what they are plotting*'],
   ['carol', 'this whole thread should burn in hell'],
   ['alice', 'anyway here are my cat pics', 'public', 'cat pictures'],
-].map(([who, text, vis, cw], i) => ({
-  id: 'fx' + i, account: { acct: who, display_name: who },
-  content: text, media_attachments: [], visibility: vis || 'public',
-  spoiler_text: cw || '',
+  ['bob', 'behold my fursona', 'public', null,
+   { type: 'image', preview_url: 'assets/chars/xeno/pose00.png',
+     meta: { original: { width: 312, height: 322 } } }],
+  ['carol', '', 'public', null,
+   { type: 'image', preview_url: 'assets/chars/anna/pose06.png',
+     meta: { original: { width: 175, height: 441 } } }],
+].map(([who, text, vis, cw, media], i) => ({
+  id: 'fx' + i,
+  account: {
+    acct: who,
+    display_name: who === 'carol' ? 'Denpa mode :flag: carol' : who,
+    emojis: who === 'carol'
+      ? [{ shortcode: 'flag', url: 'assets/chars/anna/icon.png' }] : [],
+  },
+  content: text, media_attachments: media ? [media] : [],
+  visibility: vis || 'public', spoiler_text: cw || '',
 }));
 
 async function view(url) {

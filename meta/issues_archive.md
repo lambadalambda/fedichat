@@ -7,3 +7,4 @@
 - [x] [Balloon styles: wavy outlines, balloon types, comic lettering](issues/balloon-styles.md)
 - [x] [Title panel with cast list](issues/title-panel.md)
 - [x] [Semantic elements: keyword backgrounds and narration boxes](issues/semantic-elements.md)
+- [x] [Render post images inside speech balloons](issues/images-in-balloons.md)
