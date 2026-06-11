@@ -4,3 +4,4 @@
 - [x] [Panel composition: character inclusion, placement and facing](issues/panel-composition.md)
 - [x] [Multiple balloons per panel with routing-channel layout](issues/balloon-layout.md)
 - [x] [Camera zoom variation](issues/camera-zoom.md)
+- [x] [Balloon styles: wavy outlines, balloon types, comic lettering](issues/balloon-styles.md)

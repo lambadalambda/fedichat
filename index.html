@@ -69,14 +69,17 @@
   .balloon {
     position: absolute;
     box-sizing: border-box;
-    background: white;
-    border: 1px solid black;
-    border-radius: 10px;
     padding: 5px 8px;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 15px;
     white-space: pre-line;
     overflow-wrap: break-word;
+  }
+  .balloon.whisper { font-style: italic; }
+  .shapes {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
   }
   .tails {
     position: absolute;
@@ -313,7 +316,34 @@ const LINE_H = 15, PAD_X = 8, PAD_Y = 5;
 const TAIL_T = 16; // routing channel corridor width
 
 const measurer = document.createElement('canvas').getContext('2d');
-measurer.font = '12px "Comic Sans MS", "Comic Neue", cursive';
+measurer.font = '11px "Comic Sans MS", "Comic Neue", cursive';
+
+// Woodring-style balloon outline (§5.3): a rounded box whose long edges get
+// small low-frequency waves, deterministic per balloon. Shout balloons
+// (§5.1) get a jagged outline instead -- the type the original never shipped.
+function balloonPath(x0, y0, w, h, seed, type) {
+  const r = 8, step = 13;
+  const edges = [
+    [x0 + r, y0, x0 + w - r, y0, 0, -1],
+    [x0 + w, y0 + r, x0 + w, y0 + h - r, 1, 0],
+    [x0 + w - r, y0 + h, x0 + r, y0 + h, 0, 1],
+    [x0, y0 + h - r, x0, y0 + r, -1, 0],
+  ];
+  const pts = [];
+  let i = seed % 5;
+  for (const [x1, y1, x2, y2, nx, ny] of edges) {
+    const nseg = Math.max(1, Math.round(Math.hypot(x2 - x1, y2 - y1) / step));
+    for (let s = 0; s <= nseg; s++, i++) {
+      const fx = x1 + (x2 - x1) * s / nseg;
+      const fy = y1 + (y2 - y1) * s / nseg;
+      const off = (s === 0 || s === nseg) ? 0
+        : type === 'shout' ? (i % 2 ? 7 : -3)
+        : 1.3 * Math.sin(i * 1.1 + seed % 7) + 0.8 * Math.sin(i * .37 + seed % 13);
+      pts.push((fx + nx * off).toFixed(1) + ',' + (fy + ny * off).toFixed(1));
+    }
+  }
+  return 'M' + pts.join('L') + 'Z';
+}
 
 function wrapLines(text, innerW) {
   // Break words wider than the balloon (URLs) into fitting chunks first.
@@ -349,10 +379,12 @@ function layoutBalloons(utts, relax) {
   const placed = [];
   const channels = [];
   for (const u of utts) {
-    const lineW = measurer.measureText(u.text).width + 2 * PAD_X + 4;
+    // Comic lettering is all-caps (§5.5); measure what will be displayed.
+    const text = u.text.toUpperCase();
+    const lineW = measurer.measureText(text).width + 2 * PAD_X + 4;
     const maxW = PANEL_W - 12;
     const minWordW = Math.min(maxW, 2 * PAD_X + 6 + Math.max(
-      ...u.text.split(/\s+/).map(w => measurer.measureText(w).width)));
+      ...text.split(/\s+/).map(w => measurer.measureText(w).width)));
     let w = Math.min(lineW, maxW);
     if (lineW > maxW) {
       // Multi-line: width from text area over allowable height (paper),
@@ -380,7 +412,7 @@ function layoutBalloons(utts, relax) {
     }
     w = Math.min(w, ch.r - ch.l);
 
-    const lines = wrapLines(u.text, w - 2 * PAD_X - 2);
+    const lines = wrapLines(text, w - 2 * PAD_X - 2);
     const h = lines.length * LINE_H + 2 * PAD_Y + 2;
     const l = Math.min(Math.max(u.faceX - w / 2, ch.l), ch.r - w);
 
@@ -430,13 +462,21 @@ function render(statuses) {
     s => [s.account.acct, s.account.display_name || s.account.acct]));
   const prevNeighbors = new Map();
 
-  const utts = statuses.map((st, i) => ({
-    acct: st.account.acct,
-    text: plainText(st),
-    seed: hash(st.id),
-    emo: emotionFor(plainText(st)),
-    addressee: addresseeOf(st, statuses, i, participants),
-  }));
+  const utts = statuses.map((st, i) => {
+    const text = plainText(st);
+    const emo = emotionFor(text);
+    return {
+      acct: st.account.acct, text, emo,
+      seed: hash(st.id),
+      addressee: addresseeOf(st, statuses, i, participants),
+      // Balloon vocabulary (§5.1): non-public posts whisper, *actions*
+      // think, shouting emotion shouts.
+      type: st.visibility === 'private' || st.visibility === 'direct'
+        ? 'whisper'
+        : /^\*[^*]+\*$/.test(text) ? 'thought'
+        : emo.code === 7 ? 'shout' : 'speech',
+    };
+  });
 
   // Arrangement + balloon layout for one panel's utterances; null = no fit.
   function tryLayout(us) {
@@ -517,12 +557,28 @@ function render(statuses) {
               m.facing === 'left', names.get(m.acct), z);
     });
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'tails');
-    svg.setAttribute('viewBox', `0 0 ${PANEL_W} ${PANEL_H}`);
+    const ns = 'http://www.w3.org/2000/svg';
+    const mksvg = cls => {
+      const s = document.createElementNS(ns, 'svg');
+      s.setAttribute('class', cls);
+      s.setAttribute('viewBox', `0 0 ${PANEL_W} ${PANEL_H}`);
+      return s;
+    };
+    const shapes = mksvg('shapes'); // balloon bodies, under the text divs
+    panel.appendChild(shapes);
+    const svg = mksvg('tails');     // tails, over everything
+
     p.utts.forEach((u, j) => {
       const b = balloons[j];
-      const div = el('div', 'balloon', panel);
+      const body = document.createElementNS(ns, 'path');
+      body.setAttribute('d', balloonPath(b.l, b.t, b.w, b.h, u.seed, u.type));
+      body.setAttribute('fill', 'white');
+      body.setAttribute('stroke', 'black');
+      if (u.type === 'whisper') body.setAttribute('stroke-dasharray', '4 3');
+      shapes.appendChild(body);
+
+      const div = el('div',
+        'balloon' + (u.type === 'whisper' ? ' whisper' : ''), panel);
       div.style.left = b.l + 'px';
       div.style.top = b.t + 'px';
       div.style.width = b.w + 'px';
@@ -533,18 +589,30 @@ function render(statuses) {
       const fx = (k + 0.5) * PANEL_W / arr.length;
       const faceX = PANEL_W / 2 + (fx - PANEL_W / 2) * z;
       const faceY = charTop + 14 * z;
-      const ns = svg.namespaceURI;
-      const tail = document.createElementNS(ns, 'polygon');
-      tail.setAttribute('points',
-        `${b.tailX - 6},${b.b - 2} ${b.tailX + 8},${b.b - 2} ${faceX},${faceY}`);
-      tail.setAttribute('fill', 'white');
-      tail.setAttribute('stroke', 'black');
-      svg.appendChild(tail);
-      const gap = document.createElementNS(ns, 'line');
-      gap.setAttribute('x1', b.tailX - 5); gap.setAttribute('y1', b.b - 2);
-      gap.setAttribute('x2', b.tailX + 7); gap.setAttribute('y2', b.b - 2);
-      gap.setAttribute('stroke', 'white'); gap.setAttribute('stroke-width', 3);
-      svg.appendChild(gap);
+      if (u.type === 'thought') {
+        [0.25, 0.55, 0.82].forEach((f, q) => {
+          const c = document.createElementNS(ns, 'circle');
+          c.setAttribute('cx', b.tailX + (faceX - b.tailX) * f);
+          c.setAttribute('cy', b.b - 2 + (faceY - b.b + 2) * f);
+          c.setAttribute('r', 4.5 - q * 1.4);
+          c.setAttribute('fill', 'white');
+          c.setAttribute('stroke', 'black');
+          svg.appendChild(c);
+        });
+      } else {
+        const tail = document.createElementNS(ns, 'polygon');
+        tail.setAttribute('points',
+          `${b.tailX - 6},${b.b - 2} ${b.tailX + 8},${b.b - 2} ${faceX},${faceY}`);
+        tail.setAttribute('fill', 'white');
+        tail.setAttribute('stroke', 'black');
+        if (u.type === 'whisper') tail.setAttribute('stroke-dasharray', '4 3');
+        svg.appendChild(tail);
+        const gap = document.createElementNS(ns, 'line');
+        gap.setAttribute('x1', b.tailX - 5); gap.setAttribute('y1', b.b - 2);
+        gap.setAttribute('x2', b.tailX + 7); gap.setAttribute('y2', b.b - 2);
+        gap.setAttribute('stroke', 'white'); gap.setAttribute('stroke-width', 3);
+        svg.appendChild(gap);
+      }
     });
     panel.appendChild(svg);
   });
@@ -560,9 +628,11 @@ const FIXTURE = [
   ['carol', 'WHAT IS GOING ON'],
   ['bob', 'lol calm down'],
   ['carol', 'sorry :('],
-].map(([who, text], i) => ({
+  ['alice', 'psst this is a secret', 'direct'],
+  ['bob', '*wonders what they are plotting*'],
+].map(([who, text, vis], i) => ({
   id: 'fx' + i, account: { acct: who, display_name: who },
-  content: text, media_attachments: [],
+  content: text, media_attachments: [], visibility: vis || 'public',
 }));
 
 async function view(url) {
