@@ -86,6 +86,34 @@
     inset: 0;
     pointer-events: none;
   }
+  .title-panel {
+    box-sizing: border-box;
+    padding: 14px 12px;
+    background: white;
+    text-align: center;
+  }
+  .title-panel h1 {
+    font-size: 22px;
+    letter-spacing: 1px;
+    margin: 4px 0 2px;
+  }
+  .title-panel .sub {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  .title-panel .star {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    margin: 3px 0 3px 12px;
+    text-align: left;
+  }
+  .title-panel .star img {
+    width: 28px;
+    height: 28px;
+    border: 1px solid black;
+  }
   .nametag {
     position: absolute;
     bottom: 2px;
@@ -451,11 +479,34 @@ function addresseeOf(st, statuses, i, participants) {
   return null;
 }
 
-function render(statuses) {
+function render(statuses, title) {
   const strip = document.getElementById('strip');
   strip.innerHTML = '';
   const cast = makeCast(statuses);
   const bg = manifest.backgrounds[hash(statuses[0].id) % manifest.backgrounds.length];
+
+  // Title panel with the most active participants (paper Fig. 7).
+  {
+    const tp = el('div', 'panel title-panel', strip);
+    el('div', 'sub', tp).textContent = title || 'a comic chat';
+    el('h1', null, tp).textContent = 'COMIC CHAT';
+    el('div', 'sub', tp).textContent = 'STARRING';
+    const counts = new Map();
+    statuses.forEach(s =>
+      counts.set(s.account.acct, (counts.get(s.account.acct) || 0) + 1));
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+      .forEach(([acct]) => {
+        const row = el('div', 'star', tp);
+        const ch = cast.get(acct);
+        if (ch.icon) {
+          const img = el('img', null, row);
+          img.src = `${ASSETS}${ch.dir}/${ch.icon}`;
+        }
+        const who = statuses.find(s => s.account.acct === acct).account;
+        el('span', null, row).textContent =
+          `${who.display_name || acct} as ${ch.name}`;
+      });
+  }
 
   const participants = new Set(statuses.map(s => s.account.acct));
   const names = new Map(statuses.map(
@@ -640,13 +691,13 @@ async function view(url) {
   try {
     status.textContent = 'Loading…';
     if (url.trim() === 'test') {
-      render(FIXTURE);
+      render(FIXTURE, 'test fixture presents');
       status.textContent = 'test fixture';
       return;
     }
     const { host, id } = parseNoticeUrl(url);
     const statuses = await fetchThread(host, id);
-    render(statuses);
+    render(statuses, `${host} presents`);
     status.textContent = `${statuses.length} posts, ` +
       `${new Set(statuses.map(s => s.account.acct)).size} participants`;
     history.replaceState(null, '', '#' + encodeURIComponent(url));

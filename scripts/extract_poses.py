@@ -93,6 +93,7 @@ def parse(path):
     data = path.read_bytes()
     pos, bias = 6, 0
     name = path.stem
+    icon = None
     heads, bodies, fulls = [], [], []
     while pos < len(data):
         t = u16(data, pos)
@@ -105,7 +106,11 @@ def parse(path):
         elif t in (0x0002, 0x0008):
             pos += 4
         elif t == 0x0003:
+            icon = struct.unpack_from('<I', data, pos + 2)[0] + bias
             pos += 6
+        elif t == 0x0100:
+            icon = struct.unpack_from('<I', data, pos + 4)[0] + bias
+            pos += u16(data, pos + 2) + 4
         elif t == 0x0107:
             bias = struct.unpack_from('<I', data, pos + 4)[0]
             pos += u16(data, pos + 2) + 4
@@ -131,7 +136,7 @@ def parse(path):
             pos += 4 + n * size
         else:
             raise ValueError(f'{path.name}: unknown chunk {t:#06x} at {pos}')
-    return name, heads, bodies, fulls
+    return name, icon, heads, bodies, fulls
 
 
 def get_image(data, cache, rec):
@@ -167,7 +172,7 @@ def compose(body_img, body, head_img, head):
 
 def extract_character(path, outdir):
     data = path.read_bytes()
-    name, heads, bodies, fulls = parse(path)
+    name, icon, heads, bodies, fulls = parse(path)
     chardir = outdir / path.stem
     chardir.mkdir(parents=True, exist_ok=True)
     cache = {}
@@ -204,7 +209,12 @@ def extract_character(path, outdir):
             if b['code'] > NEUTRAL:
                 emit(closest(heads, NEUTRAL, 0), b, b['code'], b['intensity'])
 
-    return dict(name=name, dir=path.stem, poses=poses, map=posemap)
+    iconfile = None
+    if icon:
+        decode_image(data, icon).save(chardir / 'icon.png')
+        iconfile = 'icon.png'
+    return dict(name=name, dir=path.stem, icon=iconfile, poses=poses,
+                map=posemap)
 
 
 def main():
