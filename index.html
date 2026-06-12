@@ -76,11 +76,15 @@
     overflow-wrap: break-word;
   }
   .balloon.whisper { font-style: italic; }
-  .balloon img {
+  .balloon img.attach {
     display: block;
     margin: 2px auto 0;
     border: 1px solid black;
     filter: grayscale(1) contrast(1.05);
+  }
+  .balloon img.bemoji {
+    height: 13px;
+    vertical-align: -2px;
   }
   .shapes {
     position: absolute;
@@ -239,7 +243,8 @@ function plainText(st) {
   // Images render inside the balloon; other attachments get a marker.
   if (st.media_attachments.some(a => a.type !== 'image'))
     text += ' [attachment]';
-  if (text.length > 290) text = text.slice(0, 287) + '…';
+  // Long posts get split over panels; this cap is just a sanity bound.
+  if (text.length > 1200) text = text.slice(0, 1197) + '…';
   return text.trim();
 }
 
@@ -454,6 +459,67 @@ function balloonPath(x0, y0, w, h, seed, type) {
   return 'M' + pts.join('L') + 'Z';
 }
 
+// Balloon text is a list of word tokens: plain text (displayed all-caps)
+// mixed with custom emoji, which occupy a fixed width. `raw` preserves the
+// original spelling (incl. :shortcodes:) for re-splitting long posts.
+const EMOJI_W = 13;
+
+function mkword(segs) {
+  const w = segs.reduce((a, s) =>
+    a + (s.emoji ? EMOJI_W : measurer.measureText(s.text.toUpperCase()).width), 0);
+  const raw = segs.map(s => s.emoji ? s.code : s.text).join('');
+  return { w, raw, segs };
+}
+
+function wordTokens(text, emojis, innerW) {
+  const out = [];
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const segs = [];
+    const re = /:([\w-]+):/g;
+    let last = 0, m;
+    while ((m = re.exec(word))) {
+      const e = (emojis || []).find(x => x.shortcode === m[1]);
+      if (!e) continue;
+      if (m.index > last) segs.push({ text: word.slice(last, m.index) });
+      segs.push({ emoji: e.static_url || e.url, code: m[0] });
+      last = m.index + m[0].length;
+    }
+    if (last < word.length) segs.push({ text: word.slice(last) });
+    if (segs.length === 1 && segs[0].text !== undefined) {
+      // Plain word: chunk anything wider than a line (URLs).
+      let t = segs[0].text;
+      while (measurer.measureText(t.toUpperCase()).width > innerW && t.length > 1) {
+        let cut = t.length - 1;
+        while (cut > 1 &&
+               measurer.measureText(t.slice(0, cut).toUpperCase()).width > innerW)
+          cut--;
+        out.push(mkword([{ text: t.slice(0, cut) }]));
+        t = t.slice(cut);
+      }
+      out.push(mkword([{ text: t }]));
+    } else if (segs.length) {
+      out.push(mkword(segs));
+    }
+  }
+  return out;
+}
+
+function wrapTokens(words, innerW) {
+  const SP = measurer.measureText(' ').width;
+  const lines = [];
+  let cur = [], curW = 0;
+  for (const wd of words) {
+    if (cur.length && curW + SP + wd.w > innerW) {
+      lines.push(cur);
+      cur = []; curW = 0;
+    }
+    curW += (cur.length ? SP : 0) + wd.w;
+    cur.push(wd);
+  }
+  if (cur.length) lines.push(cur);
+  return lines;
+}
+
 function wrapLines(text, innerW) {
   // Break words wider than the balloon (URLs) into fitting chunks first.
   const words = text.split(/\s+/).flatMap(w => {
@@ -505,12 +571,13 @@ function layoutBalloons(utts, relax, yStart = 0) {
   const placed = [];
   const channels = [];
   for (const u of utts) {
-    // Comic lettering is all-caps (§5.5); measure what will be displayed.
-    const text = u.text.toUpperCase();
-    const lineW = measurer.measureText(text).width + 2 * PAD_X + 4;
     const maxW = PANEL_W - 12;
-    const minWordW = Math.min(maxW, 2 * PAD_X + 6 + Math.max(
-      ...text.split(/\s+/).map(w => measurer.measureText(w).width)));
+    const SP = measurer.measureText(' ').width;
+    const words = wordTokens(u.text, u.emojis, maxW - 2 * PAD_X - 2);
+    const totalW = words.reduce((a, wd, i) => a + wd.w + (i ? SP : 0), 0);
+    const lineW = totalW + 2 * PAD_X + 4;
+    const minWordW = Math.min(maxW, 2 * PAD_X + 6 +
+      words.reduce((a, wd) => Math.max(a, wd.w), 0));
     let w = Math.min(lineW, maxW);
     if (u.media) w = Math.min(maxW, Math.max(w, 110));
     if (lineW > maxW) {
@@ -539,7 +606,7 @@ function layoutBalloons(utts, relax, yStart = 0) {
     }
     w = Math.min(w, ch.r - ch.l);
 
-    const lines = text ? wrapLines(text, w - 2 * PAD_X - 2) : [];
+    const lines = words.length ? wrapTokens(words, w - 2 * PAD_X - 2) : [];
     let imgW = 0, imgH = 0;
     if (u.media) {
       imgH = 64;
@@ -582,6 +649,30 @@ function layoutBalloons(utts, relax, yStart = 0) {
     channels.push(ch);
   }
   return placed;
+}
+
+// Long posts split into multiple balloons in consecutive panels, with
+// ellipses marking the split (paper §5.2). Media rides on the last chunk,
+// the content warning on the first.
+const SPLIT_LINES = 5;
+function splitLong(u) {
+  const innerW = PANEL_W - 12 - 2 * PAD_X - 2;
+  const lines = wrapTokens(wordTokens(u.text, u.emojis, innerW), innerW);
+  if (lines.length <= SPLIT_LINES + 1) return [u];
+  const out = [];
+  for (let i = 0; i < lines.length; i += SPLIT_LINES) {
+    const raw = lines.slice(i, i + SPLIT_LINES)
+      .flat().map(wd => wd.raw).join(' ');
+    const last = i + SPLIT_LINES >= lines.length;
+    out.push({
+      ...u,
+      text: (i ? '… ' : '') + raw + (last ? '' : ' …'),
+      seed: (u.seed + i * 7919) >>> 0,
+      media: last ? u.media : null,
+      cw: i === 0 ? u.cw : null,
+    });
+  }
+  return out;
 }
 
 // Who is this post talking to? First mention that's a thread participant,
@@ -644,6 +735,7 @@ function render(statuses, title) {
         ar: dims && dims.width && dims.height ? dims.width / dims.height : 4 / 3,
       } : null,
       cw: st.spoiler_text || null,
+      emojis: st.emojis || [],
       seed: hash(st.id),
       addressee: addresseeOf(st, statuses, i, participants),
       // Balloon vocabulary (§5.1): non-public posts whisper, *actions*
@@ -653,7 +745,7 @@ function render(statuses, title) {
         : /^\*[^*]+\*$/.test(text) ? 'thought'
         : emo.code === 7 ? 'shout' : 'speech',
     };
-  });
+  }).flatMap(splitLong);
 
   // Arrangement + balloon layout for one panel's utterances; null = no fit.
   function tryLayout(us) {
@@ -783,9 +875,23 @@ function render(statuses, title) {
       div.style.top = b.t + 'px';
       div.style.width = b.w + 'px';
       div.style.height = b.h + 'px';
-      div.textContent = b.lines.join('\n');
+      b.lines.forEach((line, li) => {
+        if (li) div.append('\n');
+        line.forEach((wd, wi) => {
+          if (wi) div.append(' ');
+          for (const s of wd.segs) {
+            if (s.emoji) {
+              const em = el('img', 'bemoji', div);
+              em.src = s.emoji;
+              em.alt = s.code;
+            } else {
+              div.append(s.text.toUpperCase());
+            }
+          }
+        });
+      });
       if (u.media && b.imgH) {
-        const im = el('img', null, div);
+        const im = el('img', 'attach', div);
         im.src = u.media.url;
         im.width = Math.round(b.imgW);
         im.height = Math.round(b.imgH);
@@ -846,7 +952,16 @@ const FIXTURE = [
   ['carol', '', 'public', null,
    { type: 'image', preview_url: 'assets/chars/anna/pose06.png',
      meta: { original: { width: 175, height: 441 } } }],
-].map(([who, text, vis, cw, media], i) => ({
+  ['bob', 'big mood :flag: honestly :flag: same', 'public', null, null,
+   [{ shortcode: 'flag', url: 'assets/chars/anna/icon.png' }]],
+  ['alice', 'and now for my extremely long manifesto about comic chat: ' +
+   'the panels must flow, the balloons must wave, the characters must ' +
+   'emote, and the reader must never get lost on the way through the ' +
+   'strip. this is the way of woodring and kurlander and salesin, as it ' +
+   'was in 1996, as it shall be on the fediverse, forever and ever, ' +
+   'panel after panel, balloon after balloon, until the timeline itself ' +
+   'runs out of posts to render.'],
+].map(([who, text, vis, cw, media, emojis], i) => ({
   id: 'fx' + i,
   account: {
     acct: who,
@@ -856,6 +971,7 @@ const FIXTURE = [
   },
   content: text, media_attachments: media ? [media] : [],
   visibility: vis || 'public', spoiler_text: cw || '',
+  emojis: emojis || [],
 }));
 
 async function view(url) {
@@ -880,6 +996,11 @@ async function view(url) {
 
 document.getElementById('go').onclick = () =>
   view(document.getElementById('url').value);
+window.addEventListener('hashchange', () => {
+  const u = decodeURIComponent(location.hash.slice(1));
+  document.getElementById('url').value = u;
+  view(u);
+});
 document.getElementById('url').addEventListener('keydown', e => {
   if (e.key === 'Enter') view(e.target.value);
 });
