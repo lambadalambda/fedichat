@@ -547,7 +547,7 @@ function layoutBalloons(utts, relax, yStart = 0) {
       const availW = w - 2 * PAD_X - 2;
       if (imgW > availW) { imgW = availW; imgH = imgW / u.media.ar; }
     }
-    const h = lines.length * LINE_H + 2 * PAD_Y + 2
+    let h = lines.length * LINE_H + 2 * PAD_Y + 2
       + (imgH ? imgH + (lines.length ? 4 : 0) + 2 : 0);
     const l = Math.min(Math.max(u.faceX - w / 2, ch.l), ch.r - w);
 
@@ -560,7 +560,18 @@ function layoutBalloons(utts, relax, yStart = 0) {
       if (p.l + p.w / 2 > l + w / 2 || overlap) t = Math.max(t, p.b + 4);
       else t = Math.max(t, p.t);
     }
-    if (t + h > BALLOON_ZONE + yStart + (relax ? 60 : 16)) return null;
+    // A single-utterance panel must always lay out: shrink the image and,
+    // failing that, accept a balloon that covers part of the scene.
+    const limit = BALLOON_ZONE + yStart + (relax ? 60 : 16);
+    if (t + h > limit) {
+      if (!relax) return null;
+      if (imgH > 24) {
+        const shrink = Math.min(imgH - 24, t + h - limit);
+        imgH -= shrink;
+        imgW = imgH * (imgW / (imgH + shrink));
+        h -= shrink;
+      }
+    }
 
     placed.push({ l, t, w, h, b: t + h, lines, imgW, imgH,
                   tailX: Math.min(Math.max(u.faceX, l + 10), l + w - 12) });
@@ -704,6 +715,10 @@ function render(statuses, title) {
   commit();
 
   panels.forEach((p, pi) => {
+    if (!p.layout) {
+      console.warn('panel layout failed, skipping', p.utts);
+      return;
+    }
     const panel = el('div', 'panel', strip);
     const scene = el('div', 'scene', panel);
     const pbg = semanticBg(p.utts.map(u => u.text)) || bg;
