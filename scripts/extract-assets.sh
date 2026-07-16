@@ -1,6 +1,6 @@
 #!/bin/sh
 # Re-extract Comic Chat graphics from scratch.
-# Pipeline: archive.org installer (.exe, old CAB) -> bsdtar -> deark -> PNGs with alpha.
+# Pipeline: microsoft/comic-chat repo (MIT) -> raw .avb/.bgb -> deark -> PNGs with alpha.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,14 +17,25 @@ sed -i '' 's/#if _POSIX_C_SOURCE >= 200809L$/#if _POSIX_C_SOURCE >= 200809L \&\&
 make -C "$WORK/deark" -j8
 DEARK="$WORK/deark/deark"
 
-# MS Chat 2.5 installer: a self-extracting CAB that macOS bsdtar reads directly.
-curl -sL "https://archive.org/download/tucows_193891_Microsoft_Chat/Mschat25.exe" \
-    -o "$WORK/Mschat25.exe"
+# Art files come from Microsoft's official MIT-licensed source release
+# (github.com/microsoft/comic-chat). The MS Chat 2.5 roster spans two trees
+# there: comicart/ (base set) and artpack1/ (Art Pack 1, incl. the den and
+# volcano backgrounds). bolo/cro/denise/lynnea exist in both; artpack1's
+# variants match the shipped 2.5 release, comicart's are larger pre-release
+# builds, so those four are taken from artpack1.
+BASE="https://raw.githubusercontent.com/microsoft/comic-chat/main/v2.5-beta-1"
+COMICART="anna.avb armando.avb dan.avb hugh.avb jordan.avb lance.avb
+margaret.avb mike.avb susan.avb tiki.avb tongtyed.avb xeno.avb
+field.bgb pastoral.bgb room.bgb"
+ARTPACK1="bolo.avb cro.avb denise.avb kevin.avb kwensa.avb lynnea.avb
+maynard.avb rebecca.avb sage.avb scotty.avb den.bgb volcano.bgb"
 mkdir -p "$ROOT/raw"
-(cd "$WORK" && bsdtar -xf Mschat25.exe)
-cp "$WORK"/*.avb "$WORK"/*.bgb "$ROOT/raw/"
+for f in $COMICART; do curl -sfL "$BASE/comicart/$f" -o "$ROOT/raw/$f"; done
+for f in $ARTPACK1; do curl -sfL "$BASE/artpack1/$f" -o "$ROOT/raw/$f"; done
 
-for f in "$ROOT"/raw/*.avb "$ROOT"/raw/*.bgb; do
+# Only backgrounds go through deark; character poses are composited from
+# the raw .avb files by extract_poses.py.
+for f in "$ROOT"/raw/*.bgb; do
     name="$(basename "${f%.*}")"
     mkdir -p "$ROOT/assets/$name"
     "$DEARK" -od "$ROOT/assets/$name" -o "$name" "$f"
