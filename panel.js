@@ -9,6 +9,13 @@ import {
 
 export const ASSETS = 'assets/chars/';
 
+let manifest = null;
+export async function ensureManifest() {
+  if (!manifest)
+    manifest = await (await fetch(ASSETS + 'manifest.json')).json();
+  return manifest;
+}
+
 // Balloon-font measurer injected into the layout module.
 const measurer = document.createElement('canvas').getContext('2d');
 measurer.font = '11px "Comic Sans MS", "Comic Neue", cursive';
