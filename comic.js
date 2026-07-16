@@ -21,10 +21,22 @@ export function setMeasure(fn) { measure = fn; }
 
 // ---------- data ----------
 
-export function parseNoticeUrl(u) {
-  const m = u.trim().match(/^https?:\/\/([^/]+)\/(?:notice|objects)\/([A-Za-z0-9]+)/);
-  if (!m) throw new Error('Expected a URL like https://instance/notice/<id>');
-  return { host: m[1], id: m[2] };
+// Status permalink forms: Pleroma notice/object URLs and Mastodon-style
+// @user (possibly @user@domain) or /statuses/ permalinks.
+const URL_FORMS = [
+  /^https?:\/\/([^/]+)\/(?:notice|objects)\/([A-Za-z0-9-]+)/,
+  /^https?:\/\/([^/]+)\/@[^/]+\/([A-Za-z0-9]+)/,
+  /^https?:\/\/([^/]+)\/users\/[^/]+\/statuses\/([A-Za-z0-9]+)/,
+  /^https?:\/\/([^/]+)\/statuses\/([A-Za-z0-9]+)/,
+];
+
+export function parseStatusUrl(u) {
+  for (const re of URL_FORMS) {
+    const m = u.trim().match(re);
+    if (m) return { host: m[1], id: m[2] };
+  }
+  throw new Error('Expected a status URL like ' +
+    'https://instance/notice/<id> or https://instance/@user/<id>');
 }
 
 // ---------- comic mapping ----------

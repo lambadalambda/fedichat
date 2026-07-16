@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   hash, makeCast, pickPose, emotionFor, panelCost, arrange, balloonPath,
   wordTokens, spanTokens, wrapTokens, wrapPlain, splitLong, layoutBalloons,
-  semanticBg, addresseeOf, parseNoticeUrl, setMeasure,
+  semanticBg, addresseeOf, parseStatusUrl, setMeasure,
   NEUTRAL, PANEL_W, BALLOON_ZONE, SPLIT_LINES, EMOJI_W, INNER_W,
 } from '../comic.js';
 
@@ -221,10 +221,32 @@ test('addresseeOf: mention wins, else previous distinct speaker', () => {
   assert.equal(addresseeOf(sts[0], sts, 0, parts), null);
 });
 
-test('parseNoticeUrl accepts notice/objects, rejects garbage', () => {
-  assert.deepEqual(parseNoticeUrl('https://lain.com/notice/Ab3xYz'),
+test('parseStatusUrl: Pleroma notice/objects forms', () => {
+  assert.deepEqual(parseStatusUrl('https://lain.com/notice/Ab3xYz'),
                    { host: 'lain.com', id: 'Ab3xYz' });
-  assert.equal(parseNoticeUrl('https://x.org/objects/123abc').host, 'x.org');
-  assert.throws(() => parseNoticeUrl('ftp://lain.com/notice/1'));
-  assert.throws(() => parseNoticeUrl('hello'));
+  assert.equal(parseStatusUrl('https://x.org/objects/123abc').host, 'x.org');
+  assert.equal(
+    parseStatusUrl('https://x.org/objects/9a5b6c7d-1234-abcd-9876-aabbccddeeff').id,
+    '9a5b6c7d-1234-abcd-9876-aabbccddeeff');
+});
+
+test('parseStatusUrl: Mastodon permalink forms', () => {
+  assert.deepEqual(parseStatusUrl('https://mastodon.social/@Gargron/12345'),
+                   { host: 'mastodon.social', id: '12345' });
+  assert.deepEqual(
+    parseStatusUrl('https://masto.example/@user@remote.tld/998877'),
+    { host: 'masto.example', id: '998877' });
+  assert.equal(
+    parseStatusUrl('https://m.example/users/alice/statuses/42').id, '42');
+  assert.equal(parseStatusUrl('https://m.example/statuses/42').id, '42');
+  // trailing junk tolerated
+  assert.equal(
+    parseStatusUrl('https://mastodon.social/@Gargron/12345/embed').id,
+    '12345');
+});
+
+test('parseStatusUrl rejects garbage', () => {
+  assert.throws(() => parseStatusUrl('ftp://lain.com/notice/1'));
+  assert.throws(() => parseStatusUrl('hello'));
+  assert.throws(() => parseStatusUrl('https://x.org/@user'));
 });

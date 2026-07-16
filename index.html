@@ -184,7 +184,7 @@ import {
   NEUTRAL, PANEL_W, PANEL_H, CHAR_H, INNER_W,
   hash, makeCast, pickPose, emotionFor, addresseeOf, arrange, balloonPath,
   spanTokens, wrapPlain, splitLong, layoutBalloons, semanticBg,
-  parseNoticeUrl, setMeasure,
+  parseStatusUrl, setMeasure,
 } from './comic.js';
 
 const ASSETS = 'assets/chars/';
@@ -198,7 +198,13 @@ setMeasure(t => measurer.measureText(t).width);
 // ---------- data ----------
 
 async function api(host, path) {
-  const r = await fetch(`https://${host}/api/v1/${path}`);
+  let r;
+  try {
+    r = await fetch(`https://${host}/api/v1/${path}`);
+  } catch {
+    throw new Error(`Could not reach ${host} — the instance may not ` +
+      'allow cross-origin API requests (CORS), or the network is down.');
+  }
   if (!r.ok) throw new Error(`API ${path}: HTTP ${r.status}`);
   return r.json();
 }
@@ -635,7 +641,7 @@ async function view(url) {
       status.textContent = 'test fixture';
       return;
     }
-    const { host, id } = parseNoticeUrl(url);
+    const { host, id } = parseStatusUrl(url);
     const statuses = await fetchThread(host, id);
     render(statuses, `${host} presents`);
     status.textContent = `${statuses.length} posts, ` +
