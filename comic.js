@@ -11,6 +11,8 @@ export const LINE_H = 15, PAD_X = 8, PAD_Y = 5;
 export const TAIL_T = 16; // routing channel corridor width
 export const EMOJI_W = 13;
 export const SPLIT_LINES = 5;
+// Widest possible text line: balloon at max width, minus padding/border.
+export const INNER_W = PANEL_W - 12 - 2 * PAD_X - 2;
 
 // measure(text) -> pixel width in balloon font; the browser injects a canvas
 // measurer, tests a fixed-width fake.
@@ -199,8 +201,8 @@ export function balloonPath(x0, y0, w, h, seed, type) {
 // ---------- balloon text (paper §5.2) ----------
 
 // Balloon text is a list of word tokens: plain text (displayed all-caps)
-// mixed with custom emoji, which occupy a fixed width. `raw` preserves the
-// original spelling (incl. :shortcodes:) for re-splitting long posts.
+// mixed with custom emoji (fixed width) and link text (carries href).
+// `raw` preserves the original spelling (incl. :shortcodes:).
 
 export function mkword(segs) {
   const w = segs.reduce((a, s) =>
@@ -209,36 +211,52 @@ export function mkword(segs) {
   return { w, raw, segs };
 }
 
-export function wordTokens(text, emojis, innerW) {
+// Break a too-wide word into fitting chunks (URLs), keeping `href`.
+function chunkWord(text, href, innerW, out) {
+  while (measure(text.toUpperCase()) > innerW && text.length > 1) {
+    let cut = text.length - 1;
+    while (cut > 1 && measure(text.slice(0, cut).toUpperCase()) > innerW)
+      cut--;
+    out.push(mkword([{ text: text.slice(0, cut), href }]));
+    text = text.slice(cut);
+  }
+  out.push(mkword([{ text, href }]));
+}
+
+// Spans are the post's content in order: {text} or {text, href} for links.
+// Link display text tokenizes without emoji parsing; plain spans get the
+// :shortcode: treatment.
+export function spanTokens(spans, emojis, innerW) {
   const out = [];
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    const segs = [];
-    const re = /:([\w-]+):/g;
-    let last = 0, m;
-    while ((m = re.exec(word))) {
-      const e = (emojis || []).find(x => x.shortcode === m[1]);
-      if (!e) continue;
-      if (m.index > last) segs.push({ text: word.slice(last, m.index) });
-      segs.push({ emoji: e.static_url || e.url, code: m[0] });
-      last = m.index + m[0].length;
-    }
-    if (last < word.length) segs.push({ text: word.slice(last) });
-    if (segs.length === 1 && segs[0].text !== undefined) {
-      // Plain word: chunk anything wider than a line (URLs).
-      let t = segs[0].text;
-      while (measure(t.toUpperCase()) > innerW && t.length > 1) {
-        let cut = t.length - 1;
-        while (cut > 1 && measure(t.slice(0, cut).toUpperCase()) > innerW)
-          cut--;
-        out.push(mkword([{ text: t.slice(0, cut) }]));
-        t = t.slice(cut);
+  for (const span of spans) {
+    for (const word of span.text.split(/\s+/).filter(Boolean)) {
+      if (span.href) {
+        chunkWord(word, span.href, innerW, out);
+        continue;
       }
-      out.push(mkword([{ text: t }]));
-    } else if (segs.length) {
-      out.push(mkword(segs));
+      const segs = [];
+      const re = /:([\w-]+):/g;
+      let last = 0, m;
+      while ((m = re.exec(word))) {
+        const e = (emojis || []).find(x => x.shortcode === m[1]);
+        if (!e) continue;
+        if (m.index > last) segs.push({ text: word.slice(last, m.index) });
+        segs.push({ emoji: e.static_url || e.url, code: m[0] });
+        last = m.index + m[0].length;
+      }
+      if (last < word.length) segs.push({ text: word.slice(last) });
+      if (segs.length === 1 && segs[0].text !== undefined) {
+        chunkWord(segs[0].text, undefined, innerW, out);
+      } else if (segs.length) {
+        out.push(mkword(segs));
+      }
     }
   }
   return out;
+}
+
+export function wordTokens(text, emojis, innerW) {
+  return spanTokens([{ text }], emojis, innerW);
 }
 
 export function wrapTokens(words, innerW) {
@@ -264,20 +282,21 @@ export function wrapPlain(text, innerW) {
 }
 
 // Long posts split into multiple balloons in consecutive panels, with
-// ellipses marking the split (paper §5.2). Media rides on the last chunk,
-// the content warning on the first.
+// ellipsis tokens marking the split (paper §5.2). Operates on the
+// utterance's word tokens so links and emoji survive. Media rides on the
+// last chunk, the content warning on the first.
 export function splitLong(u) {
-  const innerW = PANEL_W - 12 - 2 * PAD_X - 2;
-  const lines = wrapTokens(wordTokens(u.text, u.emojis, innerW), innerW);
+  const lines = wrapTokens(u.words, INNER_W);
   if (lines.length <= SPLIT_LINES + 1) return [u];
   const out = [];
   for (let i = 0; i < lines.length; i += SPLIT_LINES) {
-    const raw = lines.slice(i, i + SPLIT_LINES)
-      .flat().map(wd => wd.raw).join(' ');
+    const words = lines.slice(i, i + SPLIT_LINES).flat();
     const last = i + SPLIT_LINES >= lines.length;
+    const dots = () => mkword([{ text: '…' }]);
     out.push({
       ...u,
-      text: (i ? '… ' : '') + raw + (last ? '' : ' …'),
+      words: [...(i ? [dots()] : []), ...words, ...(last ? [] : [dots()])],
+      text: words.map(wd => wd.raw).join(' '),
       seed: (u.seed + i * 7919) >>> 0,
       media: last ? u.media : null,
       cw: i === 0 ? u.cw : null,
@@ -318,7 +337,7 @@ export function layoutBalloons(utts, relax, yStart = 0) {
   for (const u of utts) {
     const maxW = PANEL_W - 12;
     const SP = measure(' ');
-    const words = wordTokens(u.text, u.emojis, maxW - 2 * PAD_X - 2);
+    const words = u.words;
     const totalW = words.reduce((a, wd, i) => a + wd.w + (i ? SP : 0), 0);
     const lineW = totalW + 2 * PAD_X + 4;
     const minWordW = Math.min(maxW, 2 * PAD_X + 6 +

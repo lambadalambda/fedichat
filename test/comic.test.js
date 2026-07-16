@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   hash, makeCast, pickPose, emotionFor, panelCost, arrange, balloonPath,
-  wordTokens, wrapTokens, wrapPlain, splitLong, layoutBalloons, semanticBg,
-  addresseeOf, parseNoticeUrl, setMeasure,
-  NEUTRAL, PANEL_W, BALLOON_ZONE, SPLIT_LINES, EMOJI_W,
+  wordTokens, spanTokens, wrapTokens, wrapPlain, splitLong, layoutBalloons,
+  semanticBg, addresseeOf, parseNoticeUrl, setMeasure,
+  NEUTRAL, PANEL_W, BALLOON_ZONE, SPLIT_LINES, EMOJI_W, INNER_W,
 } from '../comic.js';
 
 // Fixed-width fake: every char 6px, so widths are predictable.
@@ -86,22 +86,71 @@ test('wrapPlain returns joined display lines', () => {
   assert.equal(lines.join(' ').replace(/\s+/g, ' '), 'CW: LONG WARNING TEXT');
 });
 
+const utt = (text, extra = {}) => ({
+  text, emojis: [], seed: 1, media: null, cw: null,
+  words: wordTokens(text, extra.emojis || [], INNER_W), ...extra,
+});
+
+test('spanTokens: link spans carry href through words and chunks', () => {
+  const spans = [
+    { text: 'check this' },
+    { text: 'example.com/thing…', href: 'https://example.com/thing?full=1' },
+    { text: 'out' },
+  ];
+  const words = spanTokens(spans, [], 300);
+  assert.deepEqual(words.map(w => w.raw),
+                   ['check', 'this', 'example.com/thing…', 'out']);
+  assert.equal(words[2].segs[0].href, 'https://example.com/thing?full=1');
+  assert.ok(!words[0].segs[0].href && !words[3].segs[0].href);
+
+  // display text wider than a line: every chunk keeps the href
+  const long = spanTokens([{ text: 'x'.repeat(40), href: 'https://x.org' }],
+                          [], 60);
+  assert.ok(long.length >= 4);
+  assert.ok(long.every(w => w.segs[0].href === 'https://x.org'));
+});
+
+test('spanTokens: emoji still parse in plain spans, not in links', () => {
+  const emojis = [{ shortcode: 'flag', url: 'u.png' }];
+  const words = spanTokens(
+    [{ text: 'hi :flag:' }, { text: ':flag:', href: 'https://x.org' }],
+    emojis, 300);
+  assert.equal(words[1].segs[0].emoji, 'u.png');
+  assert.equal(words[2].segs[0].href, 'https://x.org');
+  assert.equal(words[2].segs[0].emoji, undefined);
+});
+
 test('splitLong: short passes through, long splits with ellipses', () => {
-  const short = { text: 'hi there', emojis: [], seed: 1, media: null, cw: null };
+  const short = utt('hi there');
   assert.deepEqual(splitLong(short), [short]);
 
-  const long = {
-    text: Array.from({ length: 120 }, (_, i) => 'word' + i).join(' '),
-    emojis: [], seed: 42, media: { url: 'm.png' }, cw: 'long post',
-  };
+  const long = utt(
+    Array.from({ length: 120 }, (_, i) => 'word' + i).join(' '),
+    { seed: 42, media: { url: 'm.png' }, cw: 'long post' });
   const parts = splitLong(long);
   assert.ok(parts.length > 1);
-  assert.ok(parts[0].text.endsWith('…'));
-  assert.ok(parts.at(-1).text.startsWith('…'));
+  assert.equal(parts[0].words.at(-1).raw, '…');
+  assert.equal(parts.at(-1).words[0].raw, '…');
   assert.equal(parts[0].cw, 'long post');
   assert.ok(parts.slice(1).every(p => p.cw === null));
   assert.equal(parts.at(-1).media?.url, 'm.png');
   assert.ok(parts.slice(0, -1).every(p => p.media === null));
+  // no words lost or duplicated by the split
+  const rejoined = parts.flatMap(p => p.words.map(w => w.raw))
+    .filter(r => r !== '…').join(' ');
+  assert.equal(rejoined, long.text);
+});
+
+test('splitLong: links survive splitting', () => {
+  const words = spanTokens([
+    { text: Array.from({ length: 100 }, (_, i) => 'w' + i).join(' ') },
+    { text: 'example.com', href: 'https://example.com' },
+  ], [], INNER_W);
+  const parts = splitLong({ text: 'x', emojis: [], seed: 1, media: null,
+                            cw: null, words });
+  assert.ok(parts.length > 1);
+  const linked = parts.at(-1).words.filter(w => w.segs.some(s => s.href));
+  assert.equal(linked.length, 1);
 });
 
 test('arrange: speaker and addressee end up facing each other', () => {
@@ -125,9 +174,8 @@ test('arrange respects previous-panel neighbors', () => {
 
 test('layoutBalloons: places within zone, no overlaps, reading order', () => {
   const utts = [
-    { text: 'first balloon here', emojis: [], seed: 3, faceX: 80,
-      media: null },
-    { text: 'second one', emojis: [], seed: 9, faceX: 240, media: null },
+    utt('first balloon here', { seed: 3, faceX: 80 }),
+    utt('second one', { seed: 9, faceX: 240 }),
   ];
   const placed = layoutBalloons(utts, false);
   assert.ok(placed);
@@ -143,11 +191,8 @@ test('layoutBalloons: places within zone, no overlaps, reading order', () => {
 });
 
 test('layoutBalloons: relax mode never returns null for one utterance', () => {
-  const u = {
-    text: Array.from({ length: 80 }, () => 'blah').join(' '),
-    emojis: [], seed: 5, faceX: 160,
-    media: { ar: 1.5 },
-  };
+  const u = utt(Array.from({ length: 80 }, () => 'blah').join(' '),
+                { seed: 5, faceX: 160, media: { ar: 1.5 } });
   assert.ok(layoutBalloons([u], true));
 });
 

@@ -181,10 +181,10 @@
 
 <script type="module">
 import {
-  NEUTRAL, PANEL_W, PANEL_H, CHAR_H,
+  NEUTRAL, PANEL_W, PANEL_H, CHAR_H, INNER_W,
   hash, makeCast, pickPose, emotionFor, addresseeOf, arrange, balloonPath,
-  wrapPlain, splitLong, layoutBalloons, semanticBg, parseNoticeUrl,
-  setMeasure,
+  spanTokens, wrapPlain, splitLong, layoutBalloons, semanticBg,
+  parseNoticeUrl, setMeasure,
 } from './comic.js';
 
 const ASSETS = 'assets/chars/';
@@ -216,20 +216,48 @@ async function fetchThread(host, id) {
   return [root, ...rootCtx.descendants];
 }
 
-function plainText(st) {
+// Post content as ordered spans: {text} or {text, href}. Real links keep
+// their href and their server-side ellipsized display text; mention and
+// hashtag anchors stay plain words.
+function contentSpans(st) {
   const doc = new DOMParser().parseFromString(st.content, 'text/html');
   // Drop leading @mentions, Comic Chat speech shouldn't start with handles.
   for (const a of doc.querySelectorAll('a.mention, span.h-card')) {
     const prev = a.previousSibling;
     if (!prev || !prev.textContent.trim()) a.remove(); else break;
   }
-  let text = doc.body.textContent.replace(/\s+/g, ' ').trim();
+  const spans = [];
+  let buf = '';
+  const flush = () => {
+    const text = buf.replace(/\s+/g, ' ').trim();
+    if (text) spans.push({ text });
+    buf = '';
+  };
+  const isLink = n => n.tagName === 'A' && n.href &&
+    !n.classList.contains('mention') && !n.classList.contains('hashtag') &&
+    n.rel !== 'tag';
+  (function walk(node) {
+    for (const n of node.childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) buf += n.textContent;
+      else if (isLink(n)) {
+        flush();
+        const text = n.textContent.replace(/\s+/g, ' ').trim();
+        if (text) spans.push({ text, href: n.href });
+      } else walk(n);
+    }
+  })(doc.body);
   // Images render inside the balloon; other attachments get a marker.
   if (st.media_attachments.some(a => a.type !== 'image'))
-    text += ' [attachment]';
+    buf += ' [attachment]';
+  flush();
   // Long posts get split over panels; this cap is just a sanity bound.
-  if (text.length > 1200) text = text.slice(0, 1197) + '…';
-  return text.trim();
+  let budget = 1200;
+  return spans.filter(s => {
+    if (budget <= 0) return false;
+    if (s.text.length > budget) s.text = s.text.slice(0, budget) + '…';
+    budget -= s.text.length;
+    return true;
+  });
 }
 
 // Floating full-size preview for balloon pictures, shown on hover. Lives on
@@ -336,12 +364,14 @@ function render(statuses, title) {
   const prevNeighbors = new Map();
 
   const utts = statuses.map((st, i) => {
-    const text = plainText(st);
+    const spans = contentSpans(st);
+    const text = spans.map(s => s.text).join(' ');
     const emo = emotionFor(text);
     const img = st.media_attachments.find(a => a.type === 'image');
     const dims = img && (img.meta?.original || img.meta?.small);
     return {
       acct: st.account.acct, text, emo,
+      words: spanTokens(spans, st.emojis || [], INNER_W),
       media: img ? {
         url: img.preview_url || img.url,
         full: img.url || img.preview_url,
@@ -497,6 +527,12 @@ function render(statuses, title) {
               const em = el('img', 'bemoji', div);
               em.src = s.emoji;
               em.alt = s.code;
+            } else if (s.href) {
+              const a = el('a', null, div);
+              a.href = s.href;
+              a.target = '_blank';
+              a.rel = 'noopener';
+              a.textContent = s.text.toUpperCase();
             } else {
               div.append(s.text.toUpperCase());
             }
@@ -567,6 +603,9 @@ const FIXTURE = [
      meta: { original: { width: 175, height: 441 } } }],
   ['bob', 'big mood :flag: honestly :flag: same', 'public', null, null,
    [{ shortcode: 'flag', url: 'assets/chars/anna/icon.png' }]],
+  ['carol', 'comic chat is open source now ' +
+   '<a href="https://github.com/microsoft/comic-chat">' +
+   '<span>github.com/</span>microsoft/comic-…</a> can you believe it'],
   ['alice', 'and now for my extremely long manifesto about comic chat: ' +
    'the panels must flow, the balloons must wave, the characters must ' +
    'emote, and the reader must never get lost on the way through the ' +
