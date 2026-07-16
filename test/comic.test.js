@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   hash, makeCast, pickPose, emotionFor, panelCost, arrange, balloonPath,
   wordTokens, spanTokens, wrapTokens, wrapPlain, splitLong, layoutBalloons,
-  semanticBg, addresseeOf, parseStatusUrl, setMeasure,
+  semanticBg, addresseeOf, parseStatusUrl, contextMaybeTruncated, setMeasure,
   NEUTRAL, PANEL_W, BALLOON_ZONE, SPLIT_LINES, EMOJI_W, INNER_W,
 } from '../comic.js';
 
@@ -243,6 +243,14 @@ test('parseStatusUrl: Mastodon permalink forms', () => {
   assert.equal(
     parseStatusUrl('https://mastodon.social/@Gargron/12345/embed').id,
     '12345');
+});
+
+test('contextMaybeTruncated flags Mastodon caps only', () => {
+  const ctx = (a, d) => ({ ancestors: Array(a), descendants: Array(d) });
+  assert.equal(contextMaybeTruncated(ctx(0, 59)), false);
+  assert.equal(contextMaybeTruncated(ctx(0, 60)), true);
+  assert.equal(contextMaybeTruncated(ctx(40, 0)), true);
+  assert.equal(contextMaybeTruncated(ctx(3, 12)), false);
 });
 
 test('parseStatusUrl rejects garbage', () => {

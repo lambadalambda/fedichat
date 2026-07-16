@@ -184,7 +184,7 @@ import {
   NEUTRAL, PANEL_W, PANEL_H, CHAR_H, INNER_W,
   hash, makeCast, pickPose, emotionFor, addresseeOf, arrange, balloonPath,
   spanTokens, wrapPlain, splitLong, layoutBalloons, semanticBg,
-  parseStatusUrl, setMeasure,
+  parseStatusUrl, contextMaybeTruncated, setMeasure,
 } from './comic.js';
 
 const ASSETS = 'assets/chars/';
@@ -209,17 +209,22 @@ async function api(host, path) {
   return r.json();
 }
 
-// Fetch the whole thread: walk up to the root, then take the root's descendants.
+// Fetch the whole thread: walk up to the root, then take the root's
+// descendants. `truncated` flags context responses that hit Mastodon's
+// unauthenticated caps.
 async function fetchThread(host, id) {
   const ctx = await api(host, `statuses/${id}/context`);
   const rootId = ctx.ancestors.length ? ctx.ancestors[0].id : id;
   if (rootId === id) {
     const root = await api(host, `statuses/${id}`);
-    return [root, ...ctx.descendants];
+    return { statuses: [root, ...ctx.descendants],
+             truncated: contextMaybeTruncated(ctx) };
   }
   const root = ctx.ancestors[0];
   const rootCtx = await api(host, `statuses/${rootId}/context`);
-  return [root, ...rootCtx.descendants];
+  return { statuses: [root, ...rootCtx.descendants],
+           truncated: contextMaybeTruncated(ctx) ||
+                      contextMaybeTruncated(rootCtx) };
 }
 
 // Post content as ordered spans: {text} or {text, href}. Real links keep
@@ -642,10 +647,11 @@ async function view(url) {
       return;
     }
     const { host, id } = parseStatusUrl(url);
-    const statuses = await fetchThread(host, id);
+    const { statuses, truncated } = await fetchThread(host, id);
     render(statuses, `${host} presents`);
     status.textContent = `${statuses.length} posts, ` +
-      `${new Set(statuses.map(s => s.account.acct)).size} participants`;
+      `${new Set(statuses.map(s => s.account.acct)).size} participants` +
+      (truncated ? ' (thread may be truncated by the instance)' : '');
     history.replaceState(null, '', '#' + encodeURIComponent(url));
   } catch (e) {
     status.textContent = e.message;

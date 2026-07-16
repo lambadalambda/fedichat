@@ -30,6 +30,13 @@ const URL_FORMS = [
   /^https?:\/\/([^/]+)\/statuses\/([A-Za-z0-9]+)/,
 ];
 
+// Mastodon caps unauthenticated /context responses (40 ancestors, 60
+// descendants) with no truncation signal; hitting a cap exactly is our
+// only hint. Pleroma returns full context and never trips this.
+export function contextMaybeTruncated(ctx) {
+  return ctx.ancestors.length >= 40 || ctx.descendants.length >= 60;
+}
+
 export function parseStatusUrl(u) {
   for (const re of URL_FORMS) {
     const m = u.trim().match(re);
