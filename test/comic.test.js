@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   hash, makeCast, pickPose, emotionFor, panelCost, arrange, balloonPath,
   wordTokens, spanTokens, wrapTokens, wrapPlain, splitLong, layoutBalloons,
-  semanticBg, addresseeOf, parseStatusUrl, contextMaybeTruncated, setMeasure,
+  semanticBg, addresseeOf, parseStatusUrl, contextMaybeTruncated, mediaRow,
+  setMeasure,
   NEUTRAL, PANEL_W, BALLOON_ZONE, SPLIT_LINES, EMOJI_W, INNER_W,
 } from '../comic.js';
 
@@ -87,7 +88,7 @@ test('wrapPlain returns joined display lines', () => {
 });
 
 const utt = (text, extra = {}) => ({
-  text, emojis: [], seed: 1, media: null, cw: null,
+  text, emojis: [], seed: 1, media: [], cw: null,
   words: wordTokens(text, extra.emojis || [], INNER_W), ...extra,
 });
 
@@ -126,15 +127,15 @@ test('splitLong: short passes through, long splits with ellipses', () => {
 
   const long = utt(
     Array.from({ length: 120 }, (_, i) => 'word' + i).join(' '),
-    { seed: 42, media: { url: 'm.png' }, cw: 'long post' });
+    { seed: 42, media: [{ url: 'm.png' }], cw: 'long post' });
   const parts = splitLong(long);
   assert.ok(parts.length > 1);
   assert.equal(parts[0].words.at(-1).raw, '…');
   assert.equal(parts.at(-1).words[0].raw, '…');
   assert.equal(parts[0].cw, 'long post');
   assert.ok(parts.slice(1).every(p => p.cw === null));
-  assert.equal(parts.at(-1).media?.url, 'm.png');
-  assert.ok(parts.slice(0, -1).every(p => p.media === null));
+  assert.equal(parts.at(-1).media[0]?.url, 'm.png');
+  assert.ok(parts.slice(0, -1).every(p => p.media.length === 0));
   // no words lost or duplicated by the split
   const rejoined = parts.flatMap(p => p.words.map(w => w.raw))
     .filter(r => r !== '…').join(' ');
@@ -146,7 +147,7 @@ test('splitLong: links survive splitting', () => {
     { text: Array.from({ length: 100 }, (_, i) => 'w' + i).join(' ') },
     { text: 'example.com', href: 'https://example.com' },
   ], [], INNER_W);
-  const parts = splitLong({ text: 'x', emojis: [], seed: 1, media: null,
+  const parts = splitLong({ text: 'x', emojis: [], seed: 1, media: [],
                             cw: null, words });
   assert.ok(parts.length > 1);
   const linked = parts.at(-1).words.filter(w => w.segs.some(s => s.href));
@@ -192,8 +193,35 @@ test('layoutBalloons: places within zone, no overlaps, reading order', () => {
 
 test('layoutBalloons: relax mode never returns null for one utterance', () => {
   const u = utt(Array.from({ length: 80 }, () => 'blah').join(' '),
-                { seed: 5, faceX: 160, media: { ar: 1.5 } });
+                { seed: 5, faceX: 160, media: [{ ar: 1.5 }] });
   assert.ok(layoutBalloons([u], true));
+});
+
+test('mediaRow: shared height, aspect-aware widths, fits available width', () => {
+  const row = mediaRow([{ ar: 1 }, { ar: 2 }], 300);
+  assert.equal(row.h, 64); // wide panel: capped by max height
+  assert.deepEqual(row.widths, [64, 128]);
+
+  const tight = mediaRow([{ ar: 1 }, { ar: 1 }], 100);
+  // 100 - 4px gap = 96 shared by ar 2 total -> h = 48
+  assert.equal(tight.h, 48);
+  assert.ok(tight.widths.reduce((a, b) => a + b, 0) + 4 <= 100.001);
+
+  assert.equal(mediaRow([], 300), null);
+});
+
+test('layoutBalloons: multi-image balloon fits and scales in relax mode', () => {
+  const many = utt('look', {
+    faceX: 160, seed: 2,
+    media: [{ ar: 4 / 3 }, { ar: 1 }, { ar: 16 / 9 }],
+    cw: null,
+  });
+  const [b] = layoutBalloons([many], true);
+  assert.ok(b.row);
+  assert.equal(b.row.widths.length, 3);
+  assert.ok(b.row.h >= 24);
+  const total = b.row.widths.reduce((a, w) => a + w, 0) + 4 * 2;
+  assert.ok(total <= b.w - 2 * 8, 'row wider than balloon');
 });
 
 test('balloonPath: deterministic closed path', () => {

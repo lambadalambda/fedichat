@@ -317,7 +317,7 @@ export function splitLong(u) {
       words: [...(i ? [dots()] : []), ...words, ...(last ? [] : [dots()])],
       text: words.map(wd => wd.raw).join(' '),
       seed: (u.seed + i * 7919) >>> 0,
-      media: last ? u.media : null,
+      media: last ? u.media : [],
       cw: i === 0 ? u.cw : null,
     });
   }
@@ -343,6 +343,25 @@ export function semanticBg(texts, backgrounds) {
   return null;
 }
 
+// ---------- media rows ----------
+
+export const MEDIA_H = 64, MEDIA_GAP = 4;
+
+// All of a post's pictures share one row in the balloon: common height,
+// aspect-ratio widths, capped by available width.
+export function mediaRow(medias, availW, maxH = MEDIA_H) {
+  if (!medias.length) return null;
+  const rowAR = medias.reduce((a, m) => a + m.ar, 0);
+  const w = availW - MEDIA_GAP * (medias.length - 1);
+  const h = Math.min(maxH, w / rowAR);
+  return { h, widths: medias.map(m => m.ar * h) };
+}
+
+function scaleRow(row, f) {
+  row.h *= f;
+  row.widths = row.widths.map(w => w * f);
+}
+
 // ---------- balloon layout (paper §5.2) ----------
 
 // PlaceBalloons with routing channels: each balloon keeps a clear vertical
@@ -362,7 +381,9 @@ export function layoutBalloons(utts, relax, yStart = 0) {
     const minWordW = Math.min(maxW, 2 * PAD_X + 6 +
       words.reduce((a, wd) => Math.max(a, wd.w), 0));
     let w = Math.min(lineW, maxW);
-    if (u.media) w = Math.min(maxW, Math.max(w, 110));
+    // Media needs room: wider minimum per extra picture in the row.
+    if (u.media.length)
+      w = Math.min(maxW, Math.max(w, 110 + 60 * (u.media.length - 1)));
     if (lineW > maxW) {
       // Multi-line: width from text area over allowable height (paper),
       // with a seeded nudge standing in for the paper's randomness.
@@ -390,15 +411,9 @@ export function layoutBalloons(utts, relax, yStart = 0) {
     w = Math.min(w, ch.r - ch.l);
 
     const lines = words.length ? wrapTokens(words, w - 2 * PAD_X - 2) : [];
-    let imgW = 0, imgH = 0;
-    if (u.media) {
-      imgH = 64;
-      imgW = imgH * u.media.ar;
-      const availW = w - 2 * PAD_X - 2;
-      if (imgW > availW) { imgW = availW; imgH = imgW / u.media.ar; }
-    }
+    const row = mediaRow(u.media, w - 2 * PAD_X - 2);
     let h = lines.length * LINE_H + 2 * PAD_Y + 2
-      + (imgH ? imgH + (lines.length ? 4 : 0) + 2 : 0);
+      + (row ? row.h + (lines.length ? 4 : 0) + 2 : 0);
     const l = Math.min(Math.max(u.faceX - w / 2, ch.l), ch.r - w);
 
     // Vertical: as high as possible, but reading order requires staying
@@ -415,15 +430,14 @@ export function layoutBalloons(utts, relax, yStart = 0) {
     const limit = BALLOON_ZONE + yStart + (relax ? 60 : 16);
     if (t + h > limit) {
       if (!relax) return null;
-      if (imgH > 24) {
-        const shrink = Math.min(imgH - 24, t + h - limit);
-        imgH -= shrink;
-        imgW = imgH * (imgW / (imgH + shrink));
+      if (row && row.h > 24) {
+        const shrink = Math.min(row.h - 24, t + h - limit);
+        scaleRow(row, (row.h - shrink) / row.h);
         h -= shrink;
       }
     }
 
-    placed.push({ l, t, w, h, b: t + h, lines, imgW, imgH,
+    placed.push({ l, t, w, h, b: t + h, lines, row,
                   tailX: Math.min(Math.max(u.faceX, l + 10), l + w - 12) });
     channels.forEach((c, k) => {
       if (utts[k].faceX < u.faceX) c.r = Math.min(c.r, l);
