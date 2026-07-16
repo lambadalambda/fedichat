@@ -413,8 +413,8 @@ function render(statuses, title) {
         img.src = s.icon;
       }
       const span = el('span', null, row);
+      span.append(`${s.charName} as `);
       span.appendChild(nameFrag(s.account));
-      span.append(` as ${s.charName}`);
     }
   }
 
@@ -717,7 +717,7 @@ function drawTitlePanel(ctx, t, loaded) {
       ctx.strokeStyle = 'black';
       ctx.strokeRect(24.5, y - 17.5, 27, 27);
     }
-    ctx.fillText(`${s.name} as ${s.charName}`, 60, y);
+    ctx.fillText(`${s.charName} as ${s.name}`, 60, y);
     y += 34;
   }
   ctx.strokeStyle = 'black';

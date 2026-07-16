@@ -17,3 +17,4 @@
 - [x] [Media polish: all images, sensitive blur, video stills](issues/media-polish.md)
 - [x] [Adopt the full character/background roster from microsoft/comic-chat](issues/adopt-full-character-roster.md)
 - [x] [Export the strip as a PNG](issues/png-export.md)
+- [x] [Title panel billing is backwards](issues/title-panel-billing-order.md)
