@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>fedichat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Comic Sans MS", "Comic Neue", cursive;
+    background: #008080;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    padding: 16px 8px;
+  }
+  .app {
+    width: 800px;
+    background: #c0c0c0;
+    border: 2px solid;
+    border-color: #fff #404040 #404040 #fff;
+    box-shadow: 1px 1px 0 #000;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 32px);
+  }
+  .titlebar {
+    background: linear-gradient(90deg, #000080, #1084d0);
+    color: white;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 3px 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .titlebar .spacer { flex: 1; }
+  .toolbar {
+    display: flex;
+    gap: 4px;
+    padding: 4px 6px;
+    border-bottom: 1px solid #808080;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .toolbar .sep { width: 1px; align-self: stretch;
+    background: #808080; border-right: 1px solid #fff; margin: 0 4px; }
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    background: #c0c0c0;
+    border: 2px solid;
+    border-color: #fff #404040 #404040 #fff;
+    padding: 3px 10px;
+  }
+  button:active { border-color: #404040 #fff #fff #404040; }
+  button:disabled { color: #808080; }
+  button.on { border-color: #404040 #fff #fff #404040; background: #d4d4d4;
+              font-weight: bold; }
+  button.primary { font-weight: bold; }
+  input[type=text], textarea, select {
+    font-family: inherit;
+    font-size: 13px;
+    border: 2px solid;
+    border-color: #404040 #fff #fff #404040;
+    background: white;
+    padding: 3px 6px;
+  }
+  #instance { width: 150px; }
+  #feedwrap { flex: 1; overflow-y: auto; background: #c0c0c0; padding: 10px; }
+  #feed { display: flex; flex-direction: column; gap: 12px; }
+  #more { margin: 12px auto; display: block; }
+  .statusbar {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-top: 1px solid #fff;
+    display: flex;
+    gap: 12px;
+  }
+  .statusbar .cell {
+    border: 1px solid;
+    border-color: #808080 #fff #fff #808080;
+    padding: 1px 8px;
+  }
+  .note { font-size: 12px; padding: 20px; text-align: center; color: #333; }
+
+  /* posts */
+  .post { display: flex; }
+  .post .side {
+    flex: 1;
+    border: 2px solid;
+    border-color: #fff #404040 #404040 #fff;
+    padding: 8px 10px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .side .who { font-weight: bold; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; }
+  .side .acct, .side .when { color: #444; font-size: 11px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side .boostedby { font-size: 11px; color: #000080; margin-top: 2px; }
+  .side .spacer { flex: 1; }
+  .side .actions { display: flex; gap: 5px; flex-wrap: wrap; }
+  .side .actions button { font-size: 11px; padding: 2px 8px; }
+  .side .actions button.lit { font-weight: bold; background: #ffffe1; }
+  .side .counts { font-size: 11px; color: #333; margin-top: 6px; }
+
+  /* comic panel (shared classes with the viewer) */
+  .panel {
+    position: relative;
+    width: 320px; height: 280px;
+    border: 1px solid black;
+    overflow: hidden;
+    background: white;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .scene { position: absolute; inset: 0;
+    background-size: cover; background-position: center bottom; }
+  .char { position: absolute; bottom: 0; height: 58%;
+    transform: translateX(-50%); }
+  .char img { height: 100%; }
+  .char.flip img { transform: scaleX(-1); }
+  .balloon {
+    position: absolute;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    font-size: 11px;
+    line-height: 15px;
+    white-space: pre-line;
+    overflow-wrap: break-word;
+  }
+  .balloon.whisper { font-style: italic; }
+  .balloon a { color: inherit; text-decoration: underline; }
+  .balloon .attachrow { display: flex; gap: 4px; justify-content: center;
+    margin-top: 2px; }
+  .balloon .att { position: relative; }
+  .balloon .att.video::after {
+    content: '▶';
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: white; text-shadow: 0 0 4px black;
+    pointer-events: none;
+  }
+  .balloon img.attach { display: block; border: 1px solid black;
+    filter: grayscale(1) contrast(1.05); }
+  .balloon img.attach.sens { filter: grayscale(1) blur(8px); cursor: pointer; }
+  .balloon img.attach.sens.revealed { filter: grayscale(1) contrast(1.05); }
+  .balloon img.bemoji { height: 13px; vertical-align: -2px; }
+  .shapes, .tails { position: absolute; inset: 0; pointer-events: none; }
+  .narration {
+    position: absolute;
+    box-sizing: border-box;
+    left: 4px; width: calc(100% - 8px);
+    background: white; border: 1px solid black;
+    padding: 2px 6px;
+    font-size: 10px; line-height: 13px;
+    white-space: pre-line;
+  }
+  .nametag {
+    position: absolute; bottom: 2px;
+    transform: translateX(-50%);
+    font-size: 10px;
+    background: rgba(255,255,255,.85);
+    border: 1px solid black;
+    padding: 0 4px;
+    max-width: 45%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  img.emoji { height: 11px; vertical-align: -2px; }
+  #preview {
+    position: fixed; display: none;
+    max-width: 60vw; max-height: 60vh;
+    border: 2px solid black; background: white; padding: 3px;
+    z-index: 100; pointer-events: none;
+  }
+
+  /* compose dialog */
+  #composewrap {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.25);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  #composewrap.open { display: flex; }
+  .dialog {
+    width: 440px;
+    background: #c0c0c0;
+    border: 2px solid;
+    border-color: #fff #404040 #404040 #fff;
+    box-shadow: 2px 2px 0 #000;
+  }
+  .dialog .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .dialog textarea { width: 100%; height: 100px; resize: vertical; }
+  .dialog .row { display: flex; gap: 6px; align-items: center; }
+  .dialog .row input { flex: 1; }
+  .dialog .buttons { display: flex; gap: 8px; justify-content: flex-end; }
+  .dialog .replying { font-size: 11px; color: #000080; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">fedichat <span id="title-extra"></span>
+    <span class="spacer"></span>
+    <a href="./" style="color:white; font-size:11px">thread viewer</a>
+  </div>
+  <div class="toolbar">
+    <input type="text" id="instance" value="lain.com" title="instance">
+    <button id="auth">Sign in</button>
+    <span class="sep"></span>
+    <button class="tab on" data-tl="local">Local</button>
+    <button class="tab" data-tl="public">Federated</button>
+    <button class="tab" data-tl="home">Home</button>
+    <span class="sep"></span>
+    <button id="compose-btn">Compose&hellip;</button>
+    <button id="refresh">Refresh</button>
+  </div>
+  <div id="feedwrap">
+    <div id="feed"></div>
+    <button id="more" hidden>Load more</button>
+  </div>
+  <div class="statusbar">
+    <span class="cell" id="s-conn">not signed in</span>
+    <span class="cell" id="s-info"></span>
+  </div>
+</div>
+
+<div id="composewrap">
+  <div class="dialog">
+    <div class="titlebar"><span id="compose-title">Compose</span>
+      <span class="spacer"></span></div>
+    <div class="body">
+      <div class="replying" id="replying" hidden></div>
+      <div class="row">
+        <label>CW:</label><input type="text" id="c-cw" placeholder="content warning (optional)">
+        <select id="c-vis">
+          <option value="public">Public</option>
+          <option value="unlisted">Unlisted</option>
+          <option value="private">Followers</option>
+          <option value="direct">Direct</option>
+        </select>
+      </div>
+      <textarea id="c-text" placeholder="say something&hellip;"></textarea>
+      <div class="buttons">
+        <button id="c-cancel">Cancel</button>
+        <button id="c-post" class="primary">Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  PANEL_W, PANEL_H, CHAR_H, hash, pickPose, layoutBalloons, semanticBg,
+  wrapPlain, relTime, splitLong,
+} from './comic.js';
+import {
+  ASSETS, el, nameFrag, addChar, mksvg, drawBalloon, statusToUtt,
+} from './panel.js';
+import { randomVerifier, pkceChallenge, authorizeUrl } from './auth.js';
+
+const $ = id => document.getElementById(id);
+const SCOPES = 'read write';
+let manifest;
+let auth = JSON.parse(localStorage.getItem('fedichat-auth') || 'null');
+let tl = 'local';
+let oldestId = null;
+let replyTo = null;
+
+// ---------- api ----------
+
+function instance() {
+  return (auth ? auth.instance : $('instance').value.trim())
+    .replace(/^https?:\/\//, '').replace(/\/.*/, '');
+}
+
+async function api(path, opts = {}) {
+  const headers = opts.headers || {};
+  if (auth?.token) headers.Authorization = `Bearer ${auth.token}`;
+  if (opts.json) {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.json);
+  }
+  let r;
+  try {
+    r = await fetch(`https://${instance()}${path}`, { ...opts, headers });
+  } catch {
+    throw new Error(`Could not reach ${instance()} — CORS or network.`);
+  }
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  return r.json();
+}
+
+// ---------- oauth ----------
+
+const redirectUri = location.origin + location.pathname;
+
+async function signIn() {
+  const host = instance();
+  const app = await api('/api/v1/apps', {
+    method: 'POST',
+    json: { client_name: 'fedichat', redirect_uris: redirectUri,
+            scopes: SCOPES, website: 'https://github.com/lambadalambda/fedichat' },
+  });
+  const verifier = randomVerifier();
+  sessionStorage.setItem('fedichat-pending', JSON.stringify({
+    instance: host, clientId: app.client_id, clientSecret: app.client_secret,
+    verifier,
+  }));
+  location.href = authorizeUrl(host, {
+    clientId: app.client_id, redirectUri, scopes: SCOPES,
+    challenge: await pkceChallenge(verifier),
+  });
+}
+
+async function finishSignIn(code) {
+  const pending = JSON.parse(sessionStorage.getItem('fedichat-pending') || 'null');
+  sessionStorage.removeItem('fedichat-pending');
+  history.replaceState(null, '', redirectUri);
+  if (!pending) return;
+  auth = { instance: pending.instance, clientId: pending.clientId,
+           clientSecret: pending.clientSecret };
+  const form = new URLSearchParams({
+    grant_type: 'authorization_code', code,
+    client_id: pending.clientId, client_secret: pending.clientSecret,
+    redirect_uri: redirectUri, code_verifier: pending.verifier,
+    scope: SCOPES,
+  });
+  const r = await fetch(`https://${pending.instance}/oauth/token`,
+                        { method: 'POST', body: form });
+  if (!r.ok) { auth = null; throw new Error('token exchange failed: HTTP ' + r.status); }
+  auth.token = (await r.json()).access_token;
+  auth.me = await api('/api/v1/accounts/verify_credentials');
+  localStorage.setItem('fedichat-auth', JSON.stringify(auth));
+}
+
+function signOut() {
+  if (auth?.token) {
+    fetch(`https://${auth.instance}/oauth/revoke`, {
+      method: 'POST',
+      body: new URLSearchParams({ client_id: auth.clientId,
+        client_secret: auth.clientSecret, token: auth.token }),
+    }).catch(() => {});
+  }
+  auth = null;
+  localStorage.removeItem('fedichat-auth');
+  syncChrome();
+  loadTimeline(true);
+}
+
+// ---------- rendering ----------
+
+function myCharacter(acct) {
+  return manifest.characters[hash(acct) % manifest.characters.length];
+}
+
+// One post, one panel: the timeline-A treatment.
+function renderPost(st) {
+  const display = st.reblog || st;
+  const acct = display.account.acct;
+  let u = { ...statusToUtt(display), acct };
+  // A timeline panel has no next panel to continue into: long posts keep
+  // only their first splitLong chunk (ends with an ellipsis token), and
+  // the media stays with it. The full post lives in the thread view.
+  const chunks = splitLong(u);
+  if (chunks.length > 1) u = { ...chunks[0], media: u.media };
+  const ch = myCharacter(acct);
+  const post = el('div', 'post');
+
+  // --- panel ---
+  const panel = el('div', 'panel', post);
+  const scene = el('div', 'scene', panel);
+  const bg = semanticBg([u.text], manifest.backgrounds) ||
+    manifest.backgrounds[hash(display.id) % manifest.backgrounds.length];
+  scene.style.backgroundImage = `url(${ASSETS}${bg.file})`;
+
+  const zoomOpts = [1, 1.45, 1.7, 1.95];
+  let z = zoomOpts[u.seed % 4];
+  if (z > 1.05 && z < 1.3) z = 1.3;
+  z = Math.min(z, 2);
+  const charTop = PANEL_H - CHAR_H;
+  scene.style.transform = `scale(${z})`;
+  scene.style.transformOrigin = `50% ${charTop}px`;
+
+  const pose = pickPose(ch, u.emo.code, u.emo.intensity, u.seed);
+  addChar(scene, panel, ch, pose, 50, false, display.account, z);
+
+  const narrations = [];
+  let yStart = 0;
+  if (u.cw) {
+    const lines = wrapPlain(('CW: ' + u.cw).toUpperCase(), PANEL_W - 24);
+    const h = lines.length * 13 + 6;
+    narrations.push({ t: 3, h, lines });
+    yStart = h + 8;
+  }
+  const balloons = layoutBalloons([{ ...u, faceX: PANEL_W / 2 }], true, yStart);
+
+  const shapes = mksvg('shapes');
+  panel.appendChild(shapes);
+  const tails = mksvg('tails');
+  for (const nb of narrations) {
+    const div = el('div', 'narration', panel);
+    div.style.top = nb.t + 'px';
+    div.style.height = nb.h + 'px';
+    div.textContent = nb.lines.join('\n');
+  }
+  if (balloons && u.words.length + u.media.length > 0)
+    drawBalloon(panel, shapes, tails, u, balloons[0],
+                { x: PANEL_W / 2, y: charTop + 14 * z });
+  panel.appendChild(tails);
+
+  panel.title = 'open thread as a comic strip';
+  panel.addEventListener('click', e => {
+    if (e.target.closest('a, img.attach')) return;
+    location.href = './#' + encodeURIComponent(
+      display.url || `https://${instance()}/notice/${display.id}`);
+  });
+
+  // --- side card ---
+  const side = el('div', 'side', post);
+  const who = el('div', 'who', side);
+  who.appendChild(nameFrag(display.account));
+  el('div', 'acct', side).textContent =
+    `@${acct} as ${ch.name}`;
+  el('div', 'when', side).textContent =
+    `${relTime(display.created_at, Date.now())} · ${display.visibility}`;
+  if (st.reblog) {
+    const bb = el('div', 'boostedby', side);
+    bb.append('boosted by ');
+    bb.appendChild(nameFrag(st.account));
+  }
+  el('div', 'spacer', side);
+
+  const actions = el('div', 'actions', side);
+  const counts = el('div', 'counts', side);
+  const syncCounts = () => {
+    counts.textContent = `${display.replies_count ?? 0} replies · ` +
+      `${display.reblogs_count ?? 0} boosts · ` +
+      `${display.favourites_count ?? 0} favs`;
+  };
+  syncCounts();
+
+  const btn = (label, fn) => {
+    const b = el('button', null, actions);
+    b.textContent = label;
+    if (!auth) { b.disabled = true; b.title = 'sign in first'; }
+    else b.addEventListener('click', fn);
+    return b;
+  };
+  btn('Reply', () => openCompose(display));
+  const boostB = btn('Boost', async () => {
+    const verb = display.reblogged ? 'unreblog' : 'reblog';
+    const res = await api(`/api/v1/statuses/${display.id}/${verb}`, { method: 'POST' });
+    const now = res.reblog || res;
+    display.reblogged = now.reblogged;
+    display.reblogs_count = now.reblogs_count;
+    boostB.classList.toggle('lit', display.reblogged);
+    syncCounts();
+  });
+  const favB = btn('Fav', async () => {
+    const verb = display.favourited ? 'unfavourite' : 'favourite';
+    const res = await api(`/api/v1/statuses/${display.id}/${verb}`, { method: 'POST' });
+    display.favourited = res.favourited;
+    display.favourites_count = res.favourites_count;
+    favB.classList.toggle('lit', display.favourited);
+    syncCounts();
+  });
+  if (display.reblogged) boostB.classList.add('lit');
+  if (display.favourited) favB.classList.add('lit');
+  if (display.visibility === 'private' || display.visibility === 'direct')
+    boostB.disabled = true;
+
+  return post;
+}
+
+// ---------- timelines ----------
+
+const TL_PATH = {
+  local: '/api/v1/timelines/public?local=true',
+  public: '/api/v1/timelines/public',
+  home: '/api/v1/timelines/home',
+};
+
+async function loadTimeline(reset) {
+  const feed = $('feed');
+  if (reset) { feed.innerHTML = ''; oldestId = null; $('more').hidden = true; }
+  if (tl === 'home' && !auth) {
+    el('div', 'note', feed).textContent =
+      'Sign in to read your home timeline. Local and Federated work without an account.';
+    return;
+  }
+  $('s-info').textContent = 'loading…';
+  try {
+    const sep = TL_PATH[tl].includes('?') ? '&' : '?';
+    const page = await api(TL_PATH[tl] + `${sep}limit=20` +
+                           (oldestId ? `&max_id=${oldestId}` : ''));
+    for (const st of page) feed.appendChild(renderPost(st));
+    if (page.length) {
+      oldestId = page.at(-1).id;
+      $('more').hidden = false;
+    }
+    $('s-info').textContent = `${feed.querySelectorAll('.post').length} posts`;
+  } catch (e) {
+    $('s-info').textContent = e.message;
+  }
+}
+
+// ---------- compose ----------
+
+function openCompose(inReplyTo = null) {
+  replyTo = inReplyTo;
+  $('compose-title').textContent = replyTo ? 'Reply' : 'Compose';
+  $('replying').hidden = !replyTo;
+  if (replyTo) {
+    $('replying').textContent =
+      `replying to @${replyTo.account.acct}: ` +
+      `“${replyTo.content.replace(/<[^>]+>/g, ' ').slice(0, 80)}…”`;
+    $('c-text').value = `@${replyTo.account.acct} `;
+    $('c-vis').value = replyTo.visibility === 'direct' ? 'direct' : 'public';
+    $('c-cw').value = replyTo.spoiler_text || '';
+  } else {
+    $('c-text').value = '';
+    $('c-cw').value = '';
+  }
+  $('composewrap').classList.add('open');
+  $('c-text').focus();
+}
+
+async function post() {
+  const status = $('c-text').value.trim();
+  if (!status) return;
+  $('c-post').disabled = true;
+  try {
+    const st = await api('/api/v1/statuses', {
+      method: 'POST',
+      json: {
+        status,
+        spoiler_text: $('c-cw').value || undefined,
+        visibility: $('c-vis').value,
+        in_reply_to_id: replyTo?.id,
+      },
+    });
+    $('composewrap').classList.remove('open');
+    if (!replyTo) $('feed').prepend(renderPost(st));
+    $('s-info').textContent = 'posted!';
+  } catch (e) {
+    $('s-info').textContent = e.message;
+  } finally {
+    $('c-post').disabled = false;
+  }
+}
+
+// ---------- chrome ----------
+
+function syncChrome() {
+  $('auth').textContent = auth ? 'Sign out' : 'Sign in';
+  $('instance').disabled = !!auth;
+  if (auth) $('instance').value = auth.instance;
+  $('compose-btn').disabled = !auth;
+  $('s-conn').textContent = auth
+    ? `${auth.instance} · @${auth.me?.acct} as ${myCharacter(auth.me?.acct || '').name}`
+    : 'not signed in — browsing anonymously';
+  $('title-extra').textContent = `— ${tl} timeline`;
+}
+
+$('auth').addEventListener('click', () => auth ? signOut() : signIn().catch(
+  e => $('s-info').textContent = e.message));
+for (const b of document.querySelectorAll('.tab')) {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    tl = b.dataset.tl;
+    syncChrome();
+    loadTimeline(true);
+  });
+}
+$('refresh').addEventListener('click', () => loadTimeline(true));
+$('more').addEventListener('click', () => loadTimeline(false));
+$('compose-btn').addEventListener('click', () => openCompose());
+$('c-cancel').addEventListener('click', () =>
+  $('composewrap').classList.remove('open'));
+$('c-post').addEventListener('click', post);
+$('instance').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadTimeline(true);
+});
+
+// ---------- boot ----------
+
+(async () => {
+  manifest = await (await fetch(ASSETS + 'manifest.json')).json();
+  const code = new URLSearchParams(location.search).get('code');
+  if (code) {
+    try { await finishSignIn(code); }
+    catch (e) { $('s-info').textContent = e.message; }
+  }
+  syncChrome();
+  loadTimeline(true);
+})();
+</script>
+</body>
+</html>

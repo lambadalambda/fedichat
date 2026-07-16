@@ -21,15 +21,25 @@ Paste a Pleroma `https://instance/notice/<id>` or Mastodon
 serve CORS; Pleroma and Mastodon both do). Type `test` instead of a URL
 for the dev fixture. **Save PNG** exports the strip as an image.
 
+`client.html` is a client prototype: local/federated timelines of any
+instance render as one comic panel per post (no account needed), OAuth
+sign-in (PKCE, in-browser — the Pinafore pattern) unlocks the home
+timeline, boosting, faving, replying and posting. Clicking a panel opens
+the thread as a strip.
+
 ## Layout
 
-- `index.html` — the browser shell: thread fetching, post-HTML parsing,
-  DOM rendering, and the canvas/PNG export backend.
+- `index.html` — the thread viewer: thread fetching, strip rendering,
+  and the canvas/PNG export backend.
+- `client.html` — the client prototype: timelines, OAuth, posting.
 - `comic.js` — the pure logic (ES module, tested): character casting,
   emotion/gesture text analysis, panel composition, routing-channel balloon
   layout, long-post splitting, balloon outlines, semantic backgrounds,
   status-URL parsing.
-- `test/comic.test.js` — `node --test` suite over `comic.js`.
+- `panel.js` — shared DOM rendering (post parsing, balloons, characters).
+- `auth.js` — OAuth 2 + PKCE helpers (tested).
+- `test/` — `node --test` suites.
+- `mockups/` — static design mockups for the client.
 - `scripts/extract_poses.py` — AVB parser: decodes the chunk format, the
   emotion-wheel metadata and neck anchors, composites head+body poses into
   `assets/chars/` (run with the Pillow venv: `.venv/bin/python`).

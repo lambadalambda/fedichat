@@ -41,3 +41,14 @@ prototype at `client.html`, alongside the thread viewer. Direction picked
 ## Notes
 
 - Follows [[client-mockups]]. Emotion-wheel compose stays future work.
+
+## Outcome (2026-07-16)
+
+Shipped as `client.html`. Verified with agent-browser against live
+lain.com: local + federated timelines render (20/page, Load more works,
+no balloon overflows — long posts keep their first splitLong chunk with
+an ellipsis), panel click opens the thread in the strip viewer, compose
+dialog renders, and Sign in reaches lain.com's real /oauth/authorize
+consent page with a valid registration. Not verified live (needs
+credentials): the token exchange, home timeline, boost/fav/reply POSTs —
+first real login will exercise them. Media upload not included.
