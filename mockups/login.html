@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Sign in</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; gap: 40px; }
+  .dialog { width: 420px; }
+  .dialog .body { padding: 14px 16px; font-size: 13px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+  .row label { width: 90px; }
+  .row input, .row select { flex: 1; }
+  .buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .greeter { text-align: center; }
+  .greeter img { height: 220px; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.4)); }
+  .greeter .balloon { position: static; display: inline-block; margin-bottom: 10px; }
+  .step2 { width: 420px; margin-top: 24px; }
+  .step2 .body { padding: 12px 16px; font-size: 12px; }
+  .progress { height: 16px; margin: 10px 0; padding: 2px; }
+  .progress .blocks { display: flex; gap: 2px; height: 100%; }
+  .progress .blocks div { width: 14px; background: #000080; }
+</style>
+</head>
+<body>
+
+<div class="greeter">
+  <div class="balloon">WELCOME TO FEDICHAT!<br>WHO ARE YOU TODAY?</div><br>
+  <img src="../assets/chars/anna/pose09.png" alt="Anna waving"
+       onerror="this.src='../assets/chars/anna/pose00.png'">
+</div>
+
+<div>
+  <div class="window dialog">
+    <div class="titlebar">Connect to the Fediverse
+      <span class="spacer"></span><span class="btn">?</span><span class="btn">✕</span>
+    </div>
+    <div class="body">
+      <div class="row">
+        <label>Instance:</label>
+        <input type="text" value="lain.com">
+      </div>
+      <div class="row">
+        <label>Software:</label>
+        <select><option>Pleroma (detected)</option><option>Mastodon</option></select>
+      </div>
+      <div style="font-size:11px; color:#333; margin: 12px 0;">
+        fedichat registers itself as an app on your instance and opens the
+        authorization page in this window. Your password never touches
+        fedichat &mdash; only the token comes back (OAuth&nbsp;2 + PKCE).
+      </div>
+      <div class="row">
+        <input type="checkbox" checked id="rem" style="flex:0">
+        <label for="rem" style="width:auto">Stay signed in on this device</label>
+      </div>
+      <div class="buttons">
+        <button>Browse anonymously</button>
+        <button class="primary">Sign in&hellip;</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="window step2">
+    <div class="titlebar">Authorizing&hellip;</div>
+    <div class="body">
+      Waiting for <b>lain.com</b> to send you back&hellip;
+      <div class="progress inset"><div class="blocks">
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+      </div></div>
+      <div style="color:#333">Scopes requested: <b>read write</b> (timelines, posting).
+      Redirect: <code>https://lambadalambda.github.io/fedichat/auth</code></div>
+    </div>
+  </div>
+</div>
+
+<div class="mock-note"><b>mockup 1/4</b> — sign-in. Anonymous browsing keeps
+today's viewer working with zero setup; OAuth only needed for timelines
+&amp; posting.</div>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Timeline (comic panels)</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { display: flex; justify-content: center; padding: 20px; }
+  .app { width: 760px; }
+  .content { padding: 10px; display: flex; flex-direction: column; gap: 14px;
+             background: #c0c0c0; max-height: 86vh; overflow-y: auto; }
+  .post { display: flex; gap: 0; }
+  .post .panel { border: 1px solid black; }
+  .post .side {
+    flex: 1;
+    border: 2px solid;
+    border-color: #fff #404040 #404040 #fff;
+    background: #c0c0c0;
+    padding: 8px 10px;
+    font-size: 12px;
+    display: flex; flex-direction: column;
+  }
+  .side .who { font-weight: bold; }
+  .side .when { color: #444; font-size: 11px; margin-bottom: 6px; }
+  .side .spacer { flex: 1; }
+  .side .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .side .actions button { font-size: 11px; padding: 2px 8px; }
+  .side .counts { font-size: 11px; color: #333; margin-top: 6px; }
+  .tabs { display: flex; gap: 2px; padding: 4px 6px 0; }
+  .tab {
+    font-size: 12px; padding: 3px 14px;
+    background: #c0c0c0;
+    border: 2px solid; border-color: #fff #404040 transparent #fff;
+  }
+  .tab.active { font-weight: bold; position: relative; top: 1px; background: #d4d4d4; }
+</style>
+</head>
+<body>
+<div class="app window">
+  <div class="titlebar">fedichat — Home
+    <span class="spacer"></span><span class="btn">_</span><span class="btn">□</span><span class="btn">✕</span>
+  </div>
+  <div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Timeline</span><span>Help</span></div>
+  <div class="tabs">
+    <span class="tab active">Home</span><span class="tab">Local</span>
+    <span class="tab">Federated</span><span class="tab">Notifications (3)</span>
+  </div>
+  <div class="content">
+
+    <div class="post">
+      <div class="panel">
+        <div class="scene" style="background-image:url(../assets/den/den.000.png)"></div>
+        <img class="char" src="../assets/chars/tux/pose00.png" style="left:30%">
+        <div class="balloon" style="left:12%; top:14px;">FINALLY GOT MY THINKPAD
+          RUNNING PLAN 9. EVERYTHING IS A FILE AND I AM AT PEACE
+          <div class="tail" style="left:40%"></div></div>
+        <div class="nametag" style="left:30%">shitposter9000</div>
+      </div>
+      <div class="side">
+        <div class="who">shitposter9000@lain.com</div>
+        <div class="when">4 min ago · public</div>
+        <div class="spacer"></div>
+        <div class="actions">
+          <button>Reply</button><button>Boost</button><button>Fav</button><button>&hellip;</button>
+        </div>
+        <div class="counts">3 replies · 7 boosts · 12 favs</div>
+      </div>
+    </div>
+
+    <div class="post">
+      <div class="panel">
+        <div class="scene" style="background-image:url(../assets/space/space.000.png)"></div>
+        <img class="char" src="../assets/chars/xeno/pose02.png" style="left:34%">
+        <div class="balloon" style="left:10%; top:12px;">THE NEW MOON LANDER
+          FOOTAGE IS UNREAL, WATCH THE DESCENT CAMERA
+          <span style="text-decoration:underline">PEERTUBE.EXAMPLE/W/9K3&hellip;</span>
+          <div class="tail" style="left:45%"></div></div>
+        <div class="nametag" style="left:34%">rsa2048</div>
+      </div>
+      <div class="side">
+        <div class="who">rsa2048@pl.example</div>
+        <div class="when">11 min ago · public</div>
+        <div class="spacer"></div>
+        <div class="actions">
+          <button>Reply</button><button>Boost</button><button>Fav</button><button>&hellip;</button>
+        </div>
+        <div class="counts">1 reply · 2 boosts · Semantic bg: “moon” → space</div>
+      </div>
+    </div>
+
+    <div class="post">
+      <div class="panel">
+        <div class="scene" style="background-image:url(../assets/field/field.000.png)"></div>
+        <img class="char flip" src="../assets/chars/margaret/pose07.png" style="left:66%">
+        <div class="balloon" style="left:20%; top:16px; font-style:italic; border-style:dashed;">
+          PSST. FOLLOWERS ONLY: THE MEETUP IS MOVED TO THURSDAY
+          <div class="tail" style="left:60%"></div></div>
+        <div class="nametag" style="left:66%">blurrymoon</div>
+      </div>
+      <div class="side">
+        <div class="who">blurrymoon@lain.com</div>
+        <div class="when">26 min ago · followers-only (whisper balloon)</div>
+        <div class="spacer"></div>
+        <div class="actions">
+          <button>Reply</button><button disabled>Boost</button><button>Fav</button><button>&hellip;</button>
+        </div>
+        <div class="counts">reply opens the whole thread as a strip →</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="statusbar">
+    <span class="cell">lain.com · signed in as lain</span>
+    <span class="cell">streaming: connected</span>
+    <span class="cell">42 new posts</span>
+  </div>
+</div>
+<div class="mock-note"><b>mockup 2/4</b> — timeline as one panel per post,
+metadata/actions beside it. Clicking a panel expands the full thread into
+today's comic-strip view.</div>
+</body>
+</html>

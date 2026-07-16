@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Compose</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { display: flex; justify-content: center; align-items: center; padding: 20px; }
+  .app { width: 840px; }
+  .body { display: flex; gap: 10px; padding: 10px; }
+  .left { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .left textarea { width: 100%; height: 110px; resize: none; }
+  .metarow { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+  .metarow input[type=text] { flex: 1; }
+  .buttons { display: flex; gap: 8px; align-items: center; }
+  .buttons .counter { margin-left: auto; font-size: 11px; color: #333; }
+  .right { width: 300px; display: flex; flex-direction: column; gap: 8px; }
+  .selfview {
+    display: flex; gap: 8px; align-items: flex-end; justify-content: center;
+    background: white; padding: 6px; height: 180px;
+  }
+  .selfview img { height: 160px; }
+  .wheelbox { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .wheel { position: relative; }
+  .wheel svg { display: block; }
+  .wheel .dot {
+    position: absolute; width: 10px; height: 10px; border-radius: 50%;
+    background: black; border: 2px solid white;
+    left: 96px; top: 26px;
+  }
+  .preview .panel { transform: scale(0.85); transform-origin: top left; }
+  .caption { font-size: 11px; color: #333; text-align: center; }
+  .typerow { display: flex; gap: 4px; justify-content: center; }
+  .typerow button { font-size: 11px; padding: 2px 10px; }
+  .typerow button.on { border-color: #404040 #fff #fff #404040; background: #d4d4d4; }
+</style>
+</head>
+<body>
+<div class="app window">
+  <div class="titlebar">Compose — lain as Anna
+    <span class="spacer"></span><span class="btn">✕</span>
+  </div>
+  <div class="body">
+    <div class="left">
+      <div class="metarow">
+        <label>CW:</label><input type="text" placeholder="content warning (optional)">
+        <select><option>Public (speech)</option><option>Unlisted (speech)</option>
+          <option>Followers (whisper)</option><option>Direct (whisper)</option></select>
+      </div>
+      <textarea>this is AMAZING, the emotion wheel is back!!</textarea>
+      <div class="metarow">
+        <button>Attach&hellip;</button>
+        <button>Poll&hellip;</button>
+        <span style="font-size:11px;color:#333">attachments ride inside your balloon</span>
+      </div>
+      <div class="buttons">
+        <button>Preview</button>
+        <span class="counter">452 characters left · splits into 1 balloon</span>
+        <button class="primary">Post</button>
+      </div>
+
+      <div class="preview">
+        <div class="caption" style="text-align:left">live preview — how followers'
+          strips will cast it:</div>
+        <div class="panel">
+          <div class="scene" style="background-image:url(../assets/pastoral/pastoral.000.png)"></div>
+          <img class="char" src="../assets/chars/anna/pose04.png" style="left:50%">
+          <div class="balloon" style="left:14%; top:12px; border-radius: 4px;
+               border-width: 2px; box-shadow: 1px 1px black;">THIS IS AMAZING, THE
+            EMOTION WHEEL IS BACK!!<div class="tail" style="left:48%"></div></div>
+          <div class="nametag" style="left:50%">lain</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="selfview inset">
+        <img src="../assets/chars/anna/pose04.png" alt="Anna, shouting pose">
+      </div>
+      <div class="caption">your self-view: <b>Anna</b> · shouting (intensity 80%)
+        <br>emotion overrides the automatic text analysis</div>
+      <div class="wheelbox">
+        <div class="wheel">
+          <svg width="200" height="200" viewBox="-100 -100 200 200">
+            <circle r="96" fill="#fff" stroke="black"/>
+            <g stroke="black" stroke-width="1">
+              <line x1="0" y1="-96" x2="0" y2="96"/>
+              <line x1="-96" y1="0" x2="96" y2="0"/>
+              <line x1="-68" y1="-68" x2="68" y2="68"/>
+              <line x1="-68" y1="68" x2="68" y2="-68"/>
+            </g>
+            <path d="M0,0 L20,-94 A96,96 0 0 1 68,-68 Z" fill="#ffd" stroke="black" stroke-width="0"/>
+            <circle r="26" fill="#c0c0c0" stroke="black"/>
+            <g font-size="9" text-anchor="middle" font-family="inherit">
+              <text y="3">NEUTRAL</text>
+              <text x="36" y="-75" font-weight="bold">SHOUT</text>
+              <text x="72" y="-30">LAUGH</text>
+              <text x="74" y="36">HAPPY</text>
+              <text x="36" y="78">COY</text>
+              <text x="-36" y="78">BORED</text>
+              <text x="-72" y="36">SCARED</text>
+              <text x="-72" y="-30">SAD</text>
+              <text x="-36" y="-75">ANGRY</text>
+            </g>
+          </svg>
+          <div class="dot"></div>
+        </div>
+      </div>
+      <div class="caption">drag toward an emotion; farther = stronger.<br>
+        center = let the text decide (today's regex analysis)</div>
+      <div class="typerow">
+        <button>Say</button><button>Think</button>
+        <button>Whisper</button><button class="on">Shout</button>
+      </div>
+    </div>
+  </div>
+  <div class="statusbar">
+    <span class="cell">posting to lain.com as @lain</span>
+    <span class="cell">visibility → balloon type</span>
+  </div>
+</div>
+<div class="mock-note"><b>mockup 4/4</b> — compose with the emotion wheel
+(the original Comic Chat's defining widget). The chosen pose could ship as
+a post metadata tag other fedichat users' strips would honor.</div>
+</body>
+</html>

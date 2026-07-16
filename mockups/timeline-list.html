@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockup: Timeline (MS Chat list)</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { display: flex; justify-content: center; padding: 20px; }
+  .app { width: 860px; }
+  .split { display: flex; height: 66vh; }
+  .feed { flex: 1; margin: 6px; overflow-y: auto; }
+  .members { width: 190px; margin: 6px 6px 6px 0; overflow-y: auto; }
+  .members .head { font-size: 11px; font-weight: bold; padding: 3px 6px;
+    background: #c0c0c0; border-bottom: 1px solid #808080; position: sticky; top: 0; }
+  .member { display: flex; gap: 6px; align-items: center; padding: 2px 6px; font-size: 12px; }
+  .member img { width: 24px; height: 24px; border: 1px solid black; background: white; }
+  .member:hover { background: #000080; color: white; }
+  .row { display: flex; gap: 8px; padding: 5px 8px; font-size: 13px;
+         border-bottom: 1px dotted #aaa; }
+  .row:hover { background: #ffffe1; }
+  .row img.icon { width: 32px; height: 32px; border: 1px solid black; background: white; }
+  .row .body { flex: 1; }
+  .row .head { display: flex; gap: 8px; align-items: baseline; }
+  .row .name { font-weight: bold; }
+  .row .time { font-size: 10px; color: #666; }
+  .row .vis { font-size: 10px; color: #000080; }
+  .row .text { margin-top: 1px; }
+  .row .text .att { color: #000080; text-decoration: underline; font-size: 11px; }
+  .row .rt { font-size: 11px; color: #666; }
+  .row.whisper .text { font-style: italic; color: #333; }
+  .row .cw { background: #ffffe1; border: 1px solid #999; font-size: 11px; padding: 0 4px; }
+  .composer { display: flex; gap: 4px; padding: 6px; align-items: stretch; }
+  .composer .types { display: flex; gap: 2px; }
+  .composer .types button { padding: 2px 8px; font-size: 11px; }
+  .composer input { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app window">
+  <div class="titlebar">fedichat — Home timeline
+    <span class="spacer"></span><span class="btn">_</span><span class="btn">□</span><span class="btn">✕</span>
+  </div>
+  <div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Timeline</span><span>Member</span><span>Help</span></div>
+  <div class="toolbar">
+    <button title="comic view">Comic</button>
+    <button title="text view" style="border-color:#404040 #fff #fff #404040; background:#d4d4d4"><b>Text</b></button>
+    <span class="sep"></span>
+    <button>Home</button><button>Local</button><button>Fed</button><button>Notifs (3)</button>
+    <span class="sep"></span>
+    <button>Refresh</button>
+  </div>
+  <div class="split">
+    <div class="feed inset">
+
+      <div class="row">
+        <img class="icon" src="../assets/chars/tux/icon.png">
+        <div class="body">
+          <div class="head"><span class="name">shitposter9000</span>
+            <span class="time">21:42</span><span class="vis">public</span></div>
+          <div class="text">finally got my thinkpad running plan 9. everything
+            is a file and I am at peace</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <img class="icon" src="../assets/chars/xeno/icon.png">
+        <div class="body">
+          <div class="head"><span class="name">rsa2048</span>
+            <span class="time">21:35</span><span class="vis">public</span></div>
+          <div class="text">the new moon lander footage is unreal, watch the
+            descent camera <span class="att">peertube.example/w/9k3…</span>
+            <span class="att">[video]</span></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <img class="icon" src="../assets/chars/kirby/icon.png">
+        <div class="body">
+          <div class="head"><span class="name">count melancholia</span>
+            <span class="time">21:31</span><span class="rt">boosted graf@ihatebeinga.live</span></div>
+          <div class="text">imagine using a web browser in 2026</div>
+        </div>
+      </div>
+
+      <div class="row whisper">
+        <img class="icon" src="../assets/chars/margaret/icon.png">
+        <div class="body">
+          <div class="head"><span class="name">blurrymoon</span>
+            <span class="time">21:17</span><span class="vis">followers</span></div>
+          <div class="text">psst. the meetup is moved to thursday</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <img class="icon" src="../assets/chars/scotty/icon.png">
+        <div class="body">
+          <div class="head"><span class="name">dog ebooks</span>
+            <span class="time">21:09</span><span class="vis">public</span>
+            <span class="cw">CW: food</span></div>
+          <div class="text" style="color:#888">— hidden, click to show —</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <img class="icon" src="../assets/chars/anna/icon.png">
+        <div class="body">
+          <div class="head"><span class="name">lain</span>
+            <span class="time">20:58</span><span class="vis">public</span></div>
+          <div class="text">comic chat is open source now
+            <span class="att">github.com/microsoft/comic-…</span> can you
+            believe it</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="members inset">
+      <div class="head">CAST (follows online)</div>
+      <div class="member"><img src="../assets/chars/anna/icon.png">lain</div>
+      <div class="member"><img src="../assets/chars/tux/icon.png">shitposter9000</div>
+      <div class="member"><img src="../assets/chars/xeno/icon.png">rsa2048</div>
+      <div class="member"><img src="../assets/chars/margaret/icon.png">blurrymoon</div>
+      <div class="member"><img src="../assets/chars/kirby/icon.png">count melancholia</div>
+      <div class="member"><img src="../assets/chars/scotty/icon.png">dog ebooks</div>
+      <div class="member"><img src="../assets/chars/rainbow/icon.png">drummer</div>
+    </div>
+  </div>
+  <div class="composer">
+    <div class="types">
+      <button title="speech" style="border-color:#404040 #fff #fff #404040"><b>Say</b></button><button title="thought">Think</button>
+      <button title="whisper">Whisper</button><button title="shout">Shout</button>
+    </div>
+    <input type="text" placeholder="say something…">
+    <button class="primary">Send</button>
+  </div>
+  <div class="statusbar">
+    <span class="cell">lain.com · lain as Anna</span>
+    <span class="cell">streaming: connected</span>
+  </div>
+</div>
+<div class="mock-note"><b>mockup 3/4</b> — timeline as the MS Chat “text
+pane”: dense, readable, character icons as avatars, member list as the
+cast. The 🗨 Comic button flips any thread into the strip view.</div>
+</body>
+</html>
