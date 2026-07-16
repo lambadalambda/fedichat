@@ -123,6 +123,12 @@ def parse(path):
                 off = pos + 4 + i * size
                 ptr, m1, m2 = struct.unpack_from('<III', data, off)
                 code, intensity = struct.unpack_from('<HB', data, off + 12)
+                # The 0x0107 bias applies to mask pointers too (cf. deark's
+                # found_image); equal masks mean "no mask".
+                if m1 == m2:
+                    m1 = 0
+                m1 = m1 + bias if m1 else 0
+                m2 = m2 + bias if m2 else 0
                 if t == 0x000a:
                     nx, ny, ox, oy, mx, my = struct.unpack_from('<HHhhHH', data, off + 15)
                     heads.append(dict(ptr=ptr + bias, m1=m1, m2=m2, code=code,

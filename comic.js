@@ -330,7 +330,10 @@ export function splitLong(u) {
 // map to rough moods.
 export const SEMANTIC_BGS = [
   ['volcano', /\b(fire|burn\w*|flame\w*|hell|war|gulag|explo\w*|rage|destroy\w*)\b/i],
+  ['space', /\b(space|moon|mars|planet\w*|rocket\w*|star\w*|cosmos|cosmic|orbit\w*|alien\w*|ufo)\b/i],
   ['den', /\b(home|cozy|comfy|couch|sleep\w*|bed|tired|night)\b/i],
+  ['buckroom', /\b(computer\w*|program\w*|coding|code|hack\w*|games?|gaming|nerd\w*|server\w*)\b/i],
+  ['clouds', /\b(dream\w*|sky|cloud\w*|fly\w*|flying|heaven\w*|float\w*)\b/i],
   ['field', /\b(outside|nature|walk|hik\w*|sunny|weather|park|grass)\b/i],
   ['pastoral', /\b(peace\w*|calm|chill\w*|relax\w*|zen|serene)\b/i],
 ];

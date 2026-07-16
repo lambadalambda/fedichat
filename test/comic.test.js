@@ -232,8 +232,12 @@ test('balloonPath: deterministic closed path', () => {
 });
 
 test('semanticBg picks by keyword, null otherwise', () => {
-  const bgs = ['volcano', 'den', 'field', 'pastoral'].map(n => ({ name: n }));
+  const bgs = ['volcano', 'den', 'field', 'pastoral', 'space', 'clouds',
+               'buckroom'].map(n => ({ name: n }));
   assert.equal(semanticBg(['burn it all down'], bgs).name, 'volcano');
+  assert.equal(semanticBg(['the moon landing was real'], bgs).name, 'space');
+  assert.equal(semanticBg(['i had a weird dream'], bgs).name, 'clouds');
+  assert.equal(semanticBg(['rewrote my code again'], bgs).name, 'buckroom');
   assert.equal(semanticBg(['nothing topical'], bgs), null);
 });
 

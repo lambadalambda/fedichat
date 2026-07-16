@@ -24,9 +24,11 @@ DEARK="$WORK/deark/deark"
 # variants match the shipped 2.5 release, comicart's are larger pre-release
 # builds, so those four are taken from artpack1.
 BASE="https://raw.githubusercontent.com/microsoft/comic-chat/main/v2.5-beta-1"
-COMICART="anna.avb armando.avb dan.avb hugh.avb jordan.avb lance.avb
-margaret.avb mike.avb susan.avb tiki.avb tongtyed.avb xeno.avb
-field.bgb pastoral.bgb room.bgb"
+COMICART="anna.avb armando.avb buck.avb connor.avb dan.avb glenda.avb
+hugh.avb jordan.avb kirby.avb lance.avb margaret.avb mike.avb pedagog.avb
+rainbow.avb susan.avb tiki.avb tongtyed.avb tux.avb veronica.avb waf.avb
+xeno.avb
+buckroom.bgb clouds.bgb field.bgb pastoral.bgb room.bgb space.bgb yellow.bgb"
 ARTPACK1="bolo.avb cro.avb denise.avb kevin.avb kwensa.avb lynnea.avb
 maynard.avb rebecca.avb sage.avb scotty.avb den.bgb volcano.bgb"
 mkdir -p "$ROOT/raw"
