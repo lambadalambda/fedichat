@@ -3,9 +3,10 @@
 **Live: <https://lambadalambda.github.io/fedichat/>**
 
 Renders Pleroma/Mastodon threads as Microsoft Comic Chat strips, using the
-original character and background art (Jim Woodring, 1996-98) extracted from
-the MS Chat 2.5 installer on archive.org, and the composition algorithms from
-the SIGGRAPH '96 paper ([Kurlander, Skelly & Salesin, "Comic Chat"](https://grail.cs.washington.edu/wp-content/uploads/2015/08/comics.pdf)).
+original character and background art (Jim Woodring, 1996-98) from the
+MIT-licensed [microsoft/comic-chat](https://github.com/microsoft/comic-chat)
+repository, and the composition algorithms from the SIGGRAPH '96 paper
+([Kurlander, Skelly & Salesin, "Comic Chat"](https://grail.cs.washington.edu/wp-content/uploads/2015/08/comics.pdf)).
 
 ## Run
 
@@ -26,8 +27,9 @@ Type `test` instead of a URL for the dev fixture.
 - `scripts/extract_poses.py` — AVB parser: decodes the chunk format, the
   emotion-wheel metadata and neck anchors, composites head+body poses into
   `assets/chars/` (run with the Pillow venv: `.venv/bin/python`).
-- `scripts/extract-assets.sh` — re-downloads the installer from archive.org
-  and unpacks the raw `.avb`/`.bgb` files into `raw/`.
+- `scripts/extract-assets.sh` — re-downloads the raw `.avb`/`.bgb` files
+  from [microsoft/comic-chat](https://github.com/microsoft/comic-chat)
+  into `raw/`.
 - `raw/` — original AVB/BGB files (kept: they contain metadata we may still
   want, e.g. balloon/mouth anchors).
 - `meta/issues.md` — repo-local issue tracker.
@@ -40,7 +42,9 @@ gestures: 10 wave, 11 point at other, 12 point at self, 14 open arms) are
 documented in `scripts/extract_poses.py`.
 
 The character and background art is © Microsoft 1996-1998, drawn by Jim
-Woodring, extracted from the freely-distributed MS Chat 2.5 installer
-(archive.org). It's included here in the spirit of abandonware
-preservation, as Comic Chat fan sites have done since the late 90s; if
-you're Microsoft and mind, open an issue and it goes away.
+Woodring. Microsoft open-sourced Comic Chat in July 2026
+([announcement](https://opensource.microsoft.com/blog/2026/07/16/microsoft-comic-chat-is-now-open-source/));
+the `.avb`/`.bgb` art files ship in the
+[microsoft/comic-chat](https://github.com/microsoft/comic-chat) repository
+under its root MIT LICENSE with no separate asset carve-out (though the
+announcement doesn't explicitly discuss artwork licensing).
