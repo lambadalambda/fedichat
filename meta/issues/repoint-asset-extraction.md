@@ -38,3 +38,21 @@ yet.
   format version should be the same. If hashes differ, spot-check one
   character through `scripts/extract_poses.py`.
 - Related: [[readme-mit-provenance]].
+
+## Verification results (2026-07-16)
+
+- All 27 files differ from the installer versions by hash, but composited
+  pose PNGs came out byte-identical for spot-checks (anna, kevin, lynnea)
+  and a full re-extraction left `assets/chars/` and `manifest.json`
+  unchanged except one pose: the deltas are metadata, not art. Consistent
+  sizes: comicart `.avb` +2 bytes, artpack1 `.avb` +79, `.bgb` +28..65.
+- bolo/cro/denise/lynnea exist in both trees; the comicart variants are
+  2-3x larger pre-release builds, artpack1's match the release, so those
+  four are fetched from artpack1.
+- Three visible differences, all adopted: `xeno` pose02 has 184 stray
+  pixels cleaned in the top rows, and the beta `den.bgb`/`volcano.bgb` are
+  alternate colorways of the same paintings (volcano: pink mountain/olive
+  sky instead of purple/teal; den: purple chair/blue table instead of
+  red/gold). The release colorways exist nowhere in microsoft/comic-chat,
+  so keeping them would have meant keeping installer-provenance files; the
+  installer versions remain in git history before this change.
