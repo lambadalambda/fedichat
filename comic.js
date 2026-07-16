@@ -30,6 +30,16 @@ const URL_FORMS = [
   /^https?:\/\/([^/]+)\/statuses\/([A-Za-z0-9]+)/,
 ];
 
+// Relative timestamp for timeline cards; `now` injected for testability.
+export function relTime(iso, now) {
+  const s = (now - Date.parse(iso)) / 1000;
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  if (s < 14 * 86400) return `${Math.floor(s / 86400)} d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 // Mastodon caps unauthenticated /context responses (40 ancestors, 60
 // descendants) with no truncation signal; hitting a cap exactly is our
 // only hint. Pleroma returns full context and never trips this.
