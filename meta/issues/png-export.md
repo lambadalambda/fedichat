@@ -29,3 +29,13 @@ discards the layout model, so export needs a model/backend split first.
 ## Notes
 
 - Blocked by [[testable-module]]. Related: [[media-polish]].
+
+## Outcome (2026-07-16)
+
+Shipped. Verified against the fixture and a 57-post mastodon.social
+thread with remote media: 2560x9520 canvas, 15.5 MB PNG, ~340 ms, no
+canvas taint. Canvas nametags/title render display names with emoji
+shortcodes stripped (plainName) — emoji images in *balloon text* export
+fine. The download itself couldn't be observed in the automation browser
+(headless profiles drop synthetic anchor clicks); the blob-anchor
+download needs a quick manual click to confirm.

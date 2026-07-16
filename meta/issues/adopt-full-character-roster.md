@@ -29,3 +29,13 @@ more scenery to choose from.
 
 - Blocked on / follows [[repoint-asset-extraction]].
 - Related: [[readme-mit-provenance]].
+
+## Outcome (2026-07-16)
+
+All 31 characters and 7 backgrounds adopted. The new 8bpp characters
+(buck, kirby, veronica are full-color) exposed a parser bug: the 0x0107
+image-pointer bias applies to *mask* pointers too, and equal mask
+pointers mean "no mask" (matches deark's found_image). The classic
+characters never hit this because they use keyed 2bpp transparency with
+zero mask pointers. Semantic entries added for space, clouds and
+buckroom; yellow (flat abstract wash) stays random-rotation only.

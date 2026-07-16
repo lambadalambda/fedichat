@@ -13,17 +13,23 @@ repository, and the composition algorithms from the SIGGRAPH '96 paper
 ```sh
 python3 -m http.server 8742
 open http://localhost:8742/
+node --test   # unit tests, no dependencies
 ```
 
-Paste any `https://instance/notice/<id>` URL (works against the public
-Mastodon-compatible API; the instance must serve CORS, Pleroma does).
-Type `test` instead of a URL for the dev fixture.
+Paste a Pleroma `https://instance/notice/<id>` or Mastodon
+`https://instance/@user/<id>` URL (the public Mastodon-compatible API must
+serve CORS; Pleroma and Mastodon both do). Type `test` instead of a URL
+for the dev fixture. **Save PNG** exports the strip as an image.
 
 ## Layout
 
-- `index.html` — the whole viewer: thread fetching, character casting,
+- `index.html` — the browser shell: thread fetching, post-HTML parsing,
+  DOM rendering, and the canvas/PNG export backend.
+- `comic.js` — the pure logic (ES module, tested): character casting,
   emotion/gesture text analysis, panel composition, routing-channel balloon
-  layout, camera zoom, balloon styles, title panel, semantic elements.
+  layout, long-post splitting, balloon outlines, semantic backgrounds,
+  status-URL parsing.
+- `test/comic.test.js` — `node --test` suite over `comic.js`.
 - `scripts/extract_poses.py` — AVB parser: decodes the chunk format, the
   emotion-wheel metadata and neck anchors, composites head+body poses into
   `assets/chars/` (run with the Pillow venv: `.venv/bin/python`).
