@@ -20,3 +20,4 @@
 - [x] [Title panel billing is backwards](issues/title-panel-billing-order.md)
 - [x] [Mockups: fedichat as a full fediverse client](issues/client-mockups.md)
 - [x] [Client prototype: Timeline A (comic panels) with OAuth and posting](issues/client-prototype.md)
+- [x] [Integrate thread view into the client + real sign-in dialog](issues/client-integration.md)

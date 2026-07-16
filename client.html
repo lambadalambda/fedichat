@@ -177,15 +177,48 @@
     z-index: 100; pointer-events: none;
   }
 
-  /* compose dialog */
-  #composewrap {
+  /* thread view */
+  #threadview { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  #threadview.open { display: flex; }
+  #threadview.open ~ #feedwrap, #feedwrap.hidden { display: none; }
+  #stripwrap { flex: 1; overflow-y: auto; }
+  #thread-title { font-size: 12px; padding: 0 6px; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 320px);
+    justify-content: center;
+    gap: 0;
+    background: white;
+    margin: 12px;
+    border: 1px solid black;
+  }
+  #strip .panel { cursor: default; }
+  .title-panel {
+    box-sizing: border-box;
+    padding: 14px 12px;
+    background: white;
+    text-align: center;
+  }
+  .title-panel h1 { font-size: 22px; letter-spacing: 1px; margin: 4px 0 2px; }
+  .title-panel .sub { font-size: 11px; margin-bottom: 8px; }
+  .title-panel .star {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; margin: 3px 0 3px 12px; text-align: left;
+  }
+  .title-panel .star img.cast-icon {
+    width: 28px; height: 28px; border: 1px solid black;
+  }
+
+  /* dialogs */
+  .modal {
     position: fixed; inset: 0;
     background: rgba(0,0,0,.25);
     display: none;
     align-items: center; justify-content: center;
     z-index: 50;
   }
-  #composewrap.open { display: flex; }
+  .modal.open { display: flex; }
   .dialog {
     width: 440px;
     background: #c0c0c0;
@@ -199,6 +232,21 @@
   .dialog .row input { flex: 1; }
   .dialog .buttons { display: flex; gap: 8px; justify-content: flex-end; }
   .dialog .replying { font-size: 11px; color: #000080; }
+
+  /* sign-in dialog */
+  .dialog .body.signin { flex-direction: row; gap: 14px; }
+  .dialog .row input[type=checkbox] { flex: 0; }
+  .signin .greeter { text-align: center; width: 130px; flex-shrink: 0; }
+  .signin .greeter img { height: 150px; }
+  .signin .gballoon {
+    display: inline-block;
+    background: white; border: 1.5px solid black; border-radius: 9px;
+    font-size: 10px; padding: 4px 7px; margin-bottom: 6px;
+  }
+  .signin .fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .signin .fields label:first-child { width: 80px; flex-shrink: 0; }
+  .signin .blurb { font-size: 11px; color: #333; }
+  #si-soft { font-size: 12px; color: #000080; }
 </style>
 </head>
 <body>
@@ -218,6 +266,14 @@
     <button id="compose-btn">Compose&hellip;</button>
     <button id="refresh">Refresh</button>
   </div>
+  <div id="threadview">
+    <div class="toolbar">
+      <button id="back">&larr; Back</button>
+      <span id="thread-title"></span>
+      <button id="save-thread" disabled>Save PNG</button>
+    </div>
+    <div id="stripwrap"><div id="strip"></div></div>
+  </div>
   <div id="feedwrap">
     <div id="feed"></div>
     <button id="more" hidden>Load more</button>
@@ -228,7 +284,40 @@
   </div>
 </div>
 
-<div id="composewrap">
+<div id="signinwrap" class="modal">
+  <div class="dialog" style="width: 520px">
+    <div class="titlebar">Connect to the Fediverse<span class="spacer"></span></div>
+    <div class="body signin">
+      <div class="greeter">
+        <div class="gballoon">WELCOME TO FEDICHAT! WHO ARE YOU TODAY?</div>
+        <img src="assets/chars/anna/pose09.png" alt="Anna">
+      </div>
+      <div class="fields">
+        <div class="row">
+          <label>Instance:</label><input type="text" id="si-instance">
+        </div>
+        <div class="row">
+          <label>Software:</label><span id="si-soft">&mdash;</span>
+        </div>
+        <div class="blurb">
+          fedichat registers itself as an app on your instance and sends you
+          to its authorization page. Your password never touches fedichat
+          &mdash; only a token comes back (OAuth&nbsp;2 + PKCE).
+        </div>
+        <div class="row">
+          <input type="checkbox" id="si-remember" checked>
+          <label for="si-remember">Stay signed in on this device</label>
+        </div>
+        <div class="buttons">
+          <button id="si-anon">Browse anonymously</button>
+          <button id="si-go" class="primary">Sign in&hellip;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="composewrap" class="modal">
   <div class="dialog">
     <div class="titlebar"><span id="compose-title">Compose</span>
       <span class="spacer"></span></div>
@@ -259,16 +348,20 @@ import {
 } from './comic.js';
 import {
   ASSETS, el, nameFrag, addChar, mksvg, drawBalloon, statusToUtt,
+  ensureManifest,
 } from './panel.js';
+import { fetchThread, renderStrip, downloadPNG } from './strip.js';
 import { randomVerifier, pkceChallenge, authorizeUrl } from './auth.js';
 
 const $ = id => document.getElementById(id);
 const SCOPES = 'read write';
 let manifest;
-let auth = JSON.parse(localStorage.getItem('fedichat-auth') || 'null');
+let auth = JSON.parse(localStorage.getItem('fedichat-auth') ||
+                      sessionStorage.getItem('fedichat-auth') || 'null');
 let tl = 'local';
 let oldestId = null;
 let replyTo = null;
+let threadModel = null;
 
 // ---------- api ----------
 
@@ -298,7 +391,7 @@ async function api(path, opts = {}) {
 
 const redirectUri = location.origin + location.pathname;
 
-async function signIn() {
+async function signIn(remember) {
   const host = instance();
   const app = await api('/api/v1/apps', {
     method: 'POST',
@@ -308,7 +401,7 @@ async function signIn() {
   const verifier = randomVerifier();
   sessionStorage.setItem('fedichat-pending', JSON.stringify({
     instance: host, clientId: app.client_id, clientSecret: app.client_secret,
-    verifier,
+    verifier, remember,
   }));
   location.href = authorizeUrl(host, {
     clientId: app.client_id, redirectUri, scopes: SCOPES,
@@ -334,7 +427,8 @@ async function finishSignIn(code) {
   if (!r.ok) { auth = null; throw new Error('token exchange failed: HTTP ' + r.status); }
   auth.token = (await r.json()).access_token;
   auth.me = await api('/api/v1/accounts/verify_credentials');
-  localStorage.setItem('fedichat-auth', JSON.stringify(auth));
+  (pending.remember ? localStorage : sessionStorage)
+    .setItem('fedichat-auth', JSON.stringify(auth));
 }
 
 function signOut() {
@@ -347,8 +441,61 @@ function signOut() {
   }
   auth = null;
   localStorage.removeItem('fedichat-auth');
+  sessionStorage.removeItem('fedichat-auth');
   syncChrome();
   loadTimeline(true);
+}
+
+// ---------- sign-in dialog ----------
+
+async function detectSoftware() {
+  const host = $('si-instance').value.trim()
+    .replace(/^https?:\/\//, '').replace(/\/.*/, '');
+  if (!host) return;
+  $('si-soft').textContent = 'detecting…';
+  try {
+    const info = await (await fetch(`https://${host}/api/v1/instance`)).json();
+    const v = info.version || '';
+    const m = v.match(/pleroma|akkoma/i);
+    $('si-soft').textContent = m
+      ? `${m[0][0].toUpperCase()}${m[0].slice(1).toLowerCase()} — ${info.title || host}`
+      : `Mastodon-compatible (${v})`;
+  } catch {
+    $('si-soft').textContent = 'unreachable (no CORS?)';
+  }
+}
+
+function openSignin() {
+  $('si-instance').value = $('instance').value;
+  $('si-soft').textContent = '—';
+  $('signinwrap').classList.add('open');
+  detectSoftware();
+}
+
+// ---------- thread view ----------
+
+function showThread(on) {
+  $('threadview').classList.toggle('open', on);
+  $('feedwrap').classList.toggle('hidden', on);
+}
+
+async function openThread(display) {
+  showThread(true);
+  $('strip').innerHTML = '';
+  $('save-thread').disabled = true;
+  $('thread-title').textContent = 'loading thread…';
+  threadModel = null;
+  try {
+    const { statuses, truncated } = await fetchThread(instance(), display.id);
+    threadModel = await renderStrip($('strip'), statuses,
+                                    `${instance()} presents`);
+    $('save-thread').disabled = false;
+    $('thread-title').textContent = `${statuses.length} posts, ` +
+      `${new Set(statuses.map(s => s.account.acct)).size} participants` +
+      (truncated ? ' (may be truncated)' : '');
+  } catch (e) {
+    $('thread-title').textContent = e.message;
+  }
 }
 
 // ---------- rendering ----------
@@ -415,8 +562,7 @@ function renderPost(st) {
   panel.title = 'open thread as a comic strip';
   panel.addEventListener('click', e => {
     if (e.target.closest('a, img.attach')) return;
-    location.href = './#' + encodeURIComponent(
-      display.url || `https://${instance()}/notice/${display.id}`);
+    openThread(display);
   });
 
   // --- side card ---
@@ -566,8 +712,27 @@ function syncChrome() {
   $('title-extra').textContent = `— ${tl} timeline`;
 }
 
-$('auth').addEventListener('click', () => auth ? signOut() : signIn().catch(
-  e => $('s-info').textContent = e.message));
+$('auth').addEventListener('click', () => auth ? signOut() : openSignin());
+$('si-anon').addEventListener('click', () => {
+  $('instance').value = $('si-instance').value;
+  $('signinwrap').classList.remove('open');
+  loadTimeline(true);
+});
+$('si-go').addEventListener('click', () => {
+  $('instance').value = $('si-instance').value;
+  signIn($('si-remember').checked)
+    .catch(e => { $('si-soft').textContent = e.message; });
+});
+$('si-instance').addEventListener('keydown', e => {
+  if (e.key === 'Enter') detectSoftware();
+});
+$('si-instance').addEventListener('blur', detectSoftware);
+$('back').addEventListener('click', () => showThread(false));
+$('save-thread').addEventListener('click', async () => {
+  $('save-thread').disabled = true;
+  try { await downloadPNG(threadModel); }
+  finally { $('save-thread').disabled = false; }
+});
 for (const b of document.querySelectorAll('.tab')) {
   b.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
@@ -590,7 +755,7 @@ $('instance').addEventListener('keydown', e => {
 // ---------- boot ----------
 
 (async () => {
-  manifest = await (await fetch(ASSETS + 'manifest.json')).json();
+  manifest = await ensureManifest();
   const code = new URLSearchParams(location.search).get('code');
   if (code) {
     try { await finishSignIn(code); }
