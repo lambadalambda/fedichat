@@ -132,9 +132,23 @@ export function emotionFor(text) {
   return { code: NEUTRAL, intensity: 0 };
 }
 
-// Who is this post talking to? First mention that's a thread participant,
-// else the previous distinct speaker.
+// Who is this post talking to? The reply target is authoritative —
+// replies inherit the whole upstream audience in `mentions`, in no
+// meaningful order, so mentions are only a fallback (as is the previous
+// distinct speaker). Self-replies fall through: a thread continuation
+// isn't addressed at yourself.
 export function addresseeOf(st, statuses, i, participants) {
+  if (st.in_reply_to_id) {
+    const parent = statuses.find(x => x.id === st.in_reply_to_id);
+    if (parent && parent.account.acct !== st.account.acct)
+      return parent.account.acct;
+  }
+  if (st.in_reply_to_account_id) {
+    const target = statuses.find(
+      x => x.account.id === st.in_reply_to_account_id);
+    if (target && target.account.acct !== st.account.acct)
+      return target.account.acct;
+  }
   const m = (st.mentions || []).find(
     x => participants.has(x.acct) && x.acct !== st.account.acct);
   if (m) return m.acct;

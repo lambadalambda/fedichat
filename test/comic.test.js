@@ -241,7 +241,7 @@ test('semanticBg picks by keyword, null otherwise', () => {
   assert.equal(semanticBg(['nothing topical'], bgs), null);
 });
 
-test('addresseeOf: mention wins, else previous distinct speaker', () => {
+test('addresseeOf: mention as fallback, else previous distinct speaker', () => {
   const sts = [
     status('a'), status('b'),
     status('a', { mentions: [{ acct: 'b' }] }),
@@ -251,6 +251,33 @@ test('addresseeOf: mention wins, else previous distinct speaker', () => {
   assert.equal(addresseeOf(sts[2], sts, 2, parts), 'b');
   assert.equal(addresseeOf(sts[3], sts, 3, parts), 'a'); // prev speaker
   assert.equal(addresseeOf(sts[0], sts, 0, parts), null);
+});
+
+test('addresseeOf: in_reply_to beats mention order', () => {
+  const st = (id, acct, accountId, extra = {}) =>
+    ({ id, account: { acct, id: accountId }, ...extra });
+  const sts = [
+    st('1', 'root', 'A1'),
+    st('2', 'parent', 'A2', { in_reply_to_id: '1' }),
+    // reply to 'parent', but mentions lead with the inherited root @
+    st('3', 'replier', 'A3', {
+      in_reply_to_id: '2',
+      mentions: [{ acct: 'root' }, { acct: 'parent' }],
+    }),
+    // parent status not in the visible thread; account id still matches
+    st('4', 'replier2', 'A4', {
+      in_reply_to_id: 'gone', in_reply_to_account_id: 'A2',
+      mentions: [{ acct: 'root' }],
+    }),
+    // self-reply thread continuation: not addressed at yourself
+    st('5', 'root', 'A1', {
+      in_reply_to_id: '1', mentions: [{ acct: 'parent' }],
+    }),
+  ];
+  const parts = new Set(['root', 'parent', 'replier', 'replier2']);
+  assert.equal(addresseeOf(sts[2], sts, 2, parts), 'parent');
+  assert.equal(addresseeOf(sts[3], sts, 3, parts), 'parent');
+  assert.equal(addresseeOf(sts[4], sts, 4, parts), 'parent'); // via mention
 });
 
 test('parseStatusUrl: Pleroma notice/objects forms', () => {
